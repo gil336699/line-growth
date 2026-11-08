@@ -136,7 +136,7 @@ What's new in the engine:
 - **Randomness** nudges each new node sideways by up to randomness × a quarter of its edge, using a hash of the seed, step and node, so even shapes break into organic folds and every run is repeatable. The nudge is part of the node's first move, so it is checked for crossings too.
 - **Determinism.** The same lines, settings and step count always give the same result, bit for bit. A test checks that a run saved half way, reopened and continued ends exactly where an uninterrupted run does, and another checks the engine against a copy of the panel's step.
 
-**Limits of the method.** Some settings are unstable: a repel radius of more than about five segment lengths (for example after halving only the segment length) packs so many nodes within reach that their pushes overwhelm the step, and lines judder in place, held back from crossing. Scale the segment length, repel radius and step size together, or turn on Auto tune. Lines that cross in an imported drawing are left as they are. Nodes are only added, never removed, so a line can't shorten. The boundary and imported curves are short straight segments, within 0.02 mm of the drawn curve. Lengths in Auto tune follow the panel's rules, which were made for a node cap of 2,600, so large boundaries may need a higher Max nodes to fill.
+**Limits of the method.** Some settings are unstable: a repel radius of more than about five segment lengths (for example after halving only the segment length) packs so many nodes within reach that their pushes overwhelm the step, and lines judder in place, held back from crossing. The status warns when that happens. Scale the segment length, repel radius and step size together, or turn on Auto tune. Lines that cross in an imported drawing are left as they are. Nodes are only added, never removed, so a line can't shorten. The boundary and imported curves are short straight segments, within 0.02 mm of the drawn curve. Lengths in Auto tune follow the panel's rules, which were made for a node cap of 2,600, so large boundaries may need a higher Max nodes to fill.
 
 ## Known limits
 
@@ -144,16 +144,19 @@ Measured on an Apple-silicon Mac, in Node 26 for the engine alone and in the app
 
 | Task | 2,600 nodes | 20,000 nodes | 50,000 nodes |
 | --- | --- | --- | --- |
-| One growth step (Node) | 0.97 ms (the Illustrator panel's step: 29.4 ms) | about 4 ms at 10,000 | 21.7 ms |
-| Growing speed (app) | about 100 steps/s, Speed 2 | 102 steps/s, Speed 4 | 38–40 steps/s, Speed 4 |
-| Time to fill (app) | about 5 s for the default 200 mm circle | under 10 s | about 20 s |
-| Page delay while growing (a 50 ms timer, app) | — | at most 3.3 ms late | at most 3.0 ms late |
-| Pause (app) | 8 ms | 17 ms | 38 ms |
-| SVG, DXF, project save (app) | — | — | 75 ms, 27 ms, 10 ms; 2.2, 2.3 and 1.8 MB |
+| One growth step, with the crossing check (Node) | 1.25 ms (the Illustrator panel's step: 28.3 ms) | 5.2 ms at 10,000 | 25.8 ms |
+| Growing speed (app) | about 102 steps/s, Speed 2 | 83 steps/s, Speed 4 | 34–35 steps/s, Speed 4 |
+| Time to fill (app) | about 5 s for the default 200 mm circle | 7 s | 21 s |
+| Page delay while growing (a 50 ms timer, app) | — | at most 10.8 ms late | at most 3.5 ms late |
+| Pause (app) | 8 ms | 12 ms | 54 ms |
+| SVG, DXF, project save (app) | — | — | 58 ms, 42 ms, 10 ms; 2.2, 2.3 and 1.8 MB |
+
+The crossing check costs about 10 % in ordinary growth. When settings are out of balance and thousands of nodes are held back each step, a step at 20,000 nodes takes about 46 ms, and the status says the lines are packed too tightly.
 
 - Up to 100,000 nodes can be set. Beyond about 50,000, growth is slow and files are large.
 - PNG export is limited to 16,384 px a side and 120 megapixels, which browsers can draw. Use SVG for larger work.
 - The live design is kept in the browser's local storage, which holds about 5 MB. Designs above roughly 100,000 nodes may not fit, so save a project file to keep work.
+- Browsers slow a hidden tab's timers, even a worker's, to a few a second. Growth catches up by running longer batches, so it keeps going at about 90 steps per second at the default size in a background tab, but Pause can then take up to a quarter of a second.
 - Frame rate in the browser wasn't measured, as the preview pane wasn't on screen during the long runs.
 
 ## Development

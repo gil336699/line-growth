@@ -6,7 +6,7 @@ import { Grower, type GrowthParams, type Strand } from '../growth/engine'
 import type { Polygon } from '../growth/geometry'
 
 export type Packed = { points: Float64Array; lengths: Int32Array; closed: Uint8Array }
-export type Frame = Packed & { step: number; nodes: number; settling: boolean; stepsPerSecond: number }
+export type Frame = Packed & { step: number; nodes: number; settling: boolean; stepsPerSecond: number; held: number } // held: nodes held back from crossing on the last step
 
 export type ToRunner =
   | { kind: 'load'; lines: Packed; step: number; params: GrowthParams; rings: Polygon[] }
@@ -46,10 +46,14 @@ const copyStrands = (strands: Strand[]): Strand[] => strands.map(s => ({ closed:
 type Run = { id: number; remaining: number | null; perBatch: number; timer?: ReturnType<typeof setTimeout> }
 const BATCH_MS = 16 // one batch per display frame at most
 const DEADLINE_MS = 30 // a batch stops early after this, so Stop and edits are never kept waiting long
+// Browsers slow a hidden page's timers, even a worker's, to a few a second. A batch then catches up on the
+// steps it missed, for up to half the time since the last batch and never more than this.
+const CATCH_UP_MS = 120
 
 export function createRunner(post: (message: FromRunner, transfer: Transferable[]) => void, now: () => number = () => performance.now()) {
   let grower: Grower | null = null
   let run: Run | null = null
+  let lastBatch = 0
   let dirty = false, inFlight = false
   // Steps per second over the last second or so of growing.
   let rateSteps = 0, rateStart = 0, rate = 0
@@ -59,7 +63,7 @@ export function createRunner(post: (message: FromRunner, transfer: Transferable[
     const packed = pack(g.strands)
     dirty = false
     inFlight = true
-    return [{ ...packed, step: g.step, nodes: g.nodes, settling: g.settling, stepsPerSecond: run ? rate : 0 }, [packed.points.buffer, packed.lengths.buffer, packed.closed.buffer]]
+    return [{ ...packed, step: g.step, nodes: g.nodes, settling: g.settling, stepsPerSecond: run ? rate : 0, held: g.held }, [packed.points.buffer, packed.lengths.buffer, packed.closed.buffer]]
   }
   function flush() {
     if (!grower || !dirty || inFlight) return
@@ -80,9 +84,13 @@ export function createRunner(post: (message: FromRunner, transfer: Transferable[
     const current = run, g = grower
     if (!current || !g) return
     const started = now()
-    const limit = current.remaining === null ? current.perBatch : Math.min(current.perBatch, current.remaining)
+    const since = lastBatch ? Math.min(1000, started - lastBatch) : BATCH_MS
+    lastBatch = started
+    // Growing runs Speed steps per display frame, catching up when timers fire late; Step runs exactly its count.
+    const limit = current.remaining === null ? Math.max(current.perBatch, Math.round((current.perBatch * since) / BATCH_MS)) : Math.min(current.perBatch, current.remaining)
+    const deadline = current.remaining === null ? Math.min(CATCH_UP_MS, Math.max(DEADLINE_MS, since / 2)) : DEADLINE_MS
     let steps = 0
-    while (steps < limit && (steps === 0 || now() - started < DEADLINE_MS)) {
+    while (steps < limit && (steps === 0 || now() - started < deadline)) {
       if (!g.stepOnce()) return end('There are no lines to grow. Draw one, or choose a start shape on the Shape tab.')
       steps++
     }
@@ -123,7 +131,7 @@ export function createRunner(post: (message: FromRunner, transfer: Transferable[
       case 'play':
         if (run) clearTimeout(run.timer)
         run = { id: message.run, remaining: message.steps, perBatch: Math.max(1, message.perBatch) }
-        rateSteps = 0; rateStart = now(); rate = 0
+        rateSteps = 0; rateStart = now(); rate = 0; lastBatch = 0
         run.timer = setTimeout(guarded(batch), 0)
         return
       case 'stop': end(''); return

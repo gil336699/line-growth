@@ -281,8 +281,13 @@ export function App() {
   })
 
   const counts = `${stats.nodes.toLocaleString()} nodes · ${stats.lines.toLocaleString()} ${stats.lines === 1 ? 'line' : 'lines'} · step ${stats.step.toLocaleString()}`
-  const statusText = status?.text ?? (growth.stopping ? 'Stopping after the current step…'
-    : growth.running ? `${stats.settling ? 'Settling at max nodes' : 'Growing'} · ${counts}` : counts)
+  // Many nodes held back from crossing on every step means the forces are out of balance, usually a repel
+  // radius far larger than the segment length.
+  const ratio = s.repelRadius / s.segmentLength
+  const strained = growth.running && stats.held > Math.max(40, stats.nodes * 0.02)
+    && `Lines are packed too tightly to move freely. The repel radius is ${ratio.toFixed(1)} segment lengths; keep it under about 5, or turn on Auto tune.`
+  const statusText = status?.text ?? (strained || (growth.stopping ? 'Stopping after the current step…'
+    : growth.running ? `${stats.settling ? 'Settling at max nodes' : 'Growing'} · ${counts}` : counts))
 
   return <main className="studio">
     <TooltipLayer />
@@ -332,7 +337,7 @@ export function App() {
       </div>
       <Dock running={growth.running} stopping={growth.stopping} canGrow={noLines}
         onGrow={grow} onPause={pause} onStep={() => { setStatus(null); growth.step() }} onReset={reset} canReset={resetBlocked}
-        status={statusText} warning={Boolean(status?.warning)}
+        status={statusText} warning={Boolean(status ? status.warning : strained)}
         canUndo={growth.canUndo} canRedo={growth.canRedo} onUndo={() => void growth.undo()} onRedo={() => void growth.redo()} />
     </div>
 

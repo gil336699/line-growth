@@ -299,7 +299,7 @@ export class Grower {
       if (!b.empty && !b.contains(x, y)) [x, y] = b.closest(x, y)
       DX[k] = x; DY[k] = y // from here on, the new positions
     }
-    this.held = untangle(strands, X, Y, DX, DY, n)
+    this.held = untangle(strands, X, Y, DX, DY, n, target * SPLIT_FACTOR)
     g = 0
     for (const s of strands) {
       const pts = s.points
@@ -313,12 +313,43 @@ export class Grower {
   held = 0
 }
 
+// Edges binned into square cells: each edge goes in every cell its bounding box touches, so a few long edges
+// don't make the cells large for everyone. The cell size grows when needed so there are never many more cells
+// than edges.
+type EdgeGrid = { x0: number; y0: number; inv: number; cols: number; rows: number; start: Int32Array; items: Int32Array }
+function buildEdgeGrid(NX: Float64Array, NY: Float64Array, edges: number[], next: Int32Array, size: number): EdgeGrid {
+  const e = edges.length
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+  for (let i = 0; i < e; i++) {
+    const a = edges[i], b = next[a]
+    x0 = Math.min(x0, NX[a], NX[b]); x1 = Math.max(x1, NX[a], NX[b]); y0 = Math.min(y0, NY[a], NY[b]); y1 = Math.max(y1, NY[a], NY[b])
+  }
+  if (!(e > 0)) { x0 = y0 = 0; x1 = y1 = 1 }
+  const w = Math.max(x1 - x0, 1e-9), h = Math.max(y1 - y0, 1e-9)
+  const limit = Math.max(64, 4 * e)
+  let cell = Math.max(size, 1e-9)
+  if ((w / cell + 1) * (h / cell + 1) > limit) cell = Math.max(cell, Math.sqrt((w * h) / limit), (w + h) / limit)
+  const cols = Math.floor(w / cell) + 1, rows = Math.floor(h / cell) + 1, inv = 1 / cell
+  const span = (i: number) => {
+    const a = edges[i], b = next[a]
+    return [Math.floor((Math.min(NX[a], NX[b]) - x0) * inv), Math.floor((Math.min(NY[a], NY[b]) - y0) * inv),
+      Math.floor((Math.max(NX[a], NX[b]) - x0) * inv), Math.floor((Math.max(NY[a], NY[b]) - y0) * inv)]
+  }
+  const start = new Int32Array(cols * rows + 1)
+  for (let i = 0; i < e; i++) { const [c0, r0, c1, r1] = span(i); for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) start[r * cols + c + 1]++ }
+  for (let c = 0; c < cols * rows; c++) start[c + 1] += start[c]
+  const fill = start.slice(0, cols * rows), items = new Int32Array(start[cols * rows])
+  for (let i = 0; i < e; i++) { const [c0, r0, c1, r1] = span(i); for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) items[fill[r * cols + c]++] = i }
+  return { x0, y0, inv, cols, rows, start, items }
+}
+
 // Keeps lines from crossing. Repulsion keeps lines apart, but a fast fold or a dense, stiff packing can carry
 // one edge across another between steps, which the Illustrator panel allowed. Any node whose move would make
 // two edges cross stays where it was, and the check repeats until no new crossing is left. Moves that cross
-// nothing are untouched, so ordinary growth is exactly the panel's. Returns how many nodes were held back.
-function untangle(strands: Strand[], X: Float64Array, Y: Float64Array, NX: Float64Array, NY: Float64Array, n: number): number {
-  // next[k]: the node after k along its line, or -1 at an open end.
+// nothing are untouched, so ordinary growth is exactly the panel's. After the first pass only edges next to a
+// node just held back can have changed, so only those are checked again. Returns how many nodes were held back.
+function untangle(strands: Strand[], X: Float64Array, Y: Float64Array, NX: Float64Array, NY: Float64Array, n: number, size: number): number {
+  // next[k]: the node after k along its line, or -1 at an open end; edgeOf, prevOf: the edges that start and end at k.
   const next = new Int32Array(n)
   let off = 0
   for (const s of strands) {
@@ -326,34 +357,33 @@ function untangle(strands: Strand[], X: Float64Array, Y: Float64Array, NX: Float
     for (let i = 0; i < m; i++) next[off + i] = i < m - 1 ? off + i + 1 : s.closed && m > 2 ? off : -1
     off += m
   }
-  const edges: number[] = []
-  for (let k = 0; k < n; k++) if (next[k] >= 0) edges.push(k)
+  const edges: number[] = [], edgeOf = new Int32Array(n).fill(-1), prevOf = new Int32Array(n).fill(-1)
+  for (let k = 0; k < n; k++) if (next[k] >= 0) { edgeOf[k] = edges.length; prevOf[next[k]] = edges.length; edges.push(k) }
   const e = edges.length
-  const MX = new Float64Array(e), MY = new Float64Array(e)
-  const stamp = new Int32Array(n)
+  const stamp = new Int32Array(n), seen = new Int32Array(e)
+  let query = 0
   const orient = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number) => (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
   let held = 0
+  let check: number[] | null = null // edges to check; null means all of them
   for (let pass = 1; pass <= 64; pass++) {
-    let longest = 0
-    for (let i = 0; i < e; i++) {
-      const a = edges[i], c = next[a]
-      MX[i] = (NX[a] + NX[c]) / 2; MY[i] = (NY[a] + NY[c]) / 2
-      const dx = NX[c] - NX[a], dy = NY[c] - NY[a]
-      longest = Math.max(longest, dx * dx + dy * dy)
-    }
-    // Two edges that cross have middles at most one edge length apart, so neighbouring cells hold every pair.
-    const grid = buildGrid(MX, MY, e, Math.sqrt(longest), 64)
+    const grid = buildEdgeGrid(NX, NY, edges, next, size)
     const back: number[] = []
-    for (let i = 0; i < e; i++) {
+    const count = check ? check.length : e
+    for (let q = 0; q < count; q++) {
+      const i = check ? check[q] : q
       const a0 = edges[i], a1 = next[a0]
       const ax0 = NX[a0], ay0 = NY[a0], ax1 = NX[a1], ay1 = NY[a1]
-      const cx = Math.floor((MX[i] - grid.x0) * grid.inv), cy = Math.floor((MY[i] - grid.y0) * grid.inv)
-      for (let yy = Math.max(0, cy - 1); yy <= Math.min(grid.rows - 1, cy + 1); yy++) {
-        for (let xx = Math.max(0, cx - 1); xx <= Math.min(grid.cols - 1, cx + 1); xx++) {
+      const c0 = Math.floor((Math.min(ax0, ax1) - grid.x0) * grid.inv), r0 = Math.floor((Math.min(ay0, ay1) - grid.y0) * grid.inv)
+      const c1 = Math.floor((Math.max(ax0, ax1) - grid.x0) * grid.inv), r1 = Math.floor((Math.max(ay0, ay1) - grid.y0) * grid.inv)
+      const visit = ++query
+      for (let yy = r0; yy <= r1; yy++) {
+        for (let xx = c0; xx <= c1; xx++) {
           const cell = yy * grid.cols + xx
           for (let k = grid.start[cell]; k < grid.start[cell + 1]; k++) {
             const j = grid.items[k]
-            if (j <= i) continue
+            // The first pass sees each pair once; later passes check their edges against all others.
+            if ((check ? j === i : j <= i) || seen[j] === visit) continue
+            seen[j] = visit
             const b0 = edges[j], b1 = next[b0]
             if (b0 === a1 || b1 === a0 || b0 === a0 || b1 === a1) continue
             const bx0 = NX[b0], by0 = NY[b0], bx1 = NX[b1], by1 = NY[b1]
@@ -372,9 +402,14 @@ function untangle(strands: Strand[], X: Float64Array, Y: Float64Array, NX: Float
       }
     }
     if (!back.length) break
-    for (const node of back) { NX[node] = X[node]; NY[node] = Y[node] }
+    const touched = new Set<number>()
+    for (const node of back) {
+      NX[node] = X[node]; NY[node] = Y[node]
+      if (edgeOf[node] >= 0) touched.add(edgeOf[node])
+      if (prevOf[node] >= 0) touched.add(prevOf[node])
+    }
+    check = [...touched]
     held += back.length
   }
   return held
 }
-
