@@ -10,7 +10,7 @@ import type { Tool } from './Stage'
 // the measurements panel.
 
 const TOOLS: { id: Tool; label: string; icon: IconName; key: string; tip: string }[] = [
-  { id: 'draw', label: 'Draw', icon: 'draw', key: 'D', tip: 'Drag to draw a line to grow; end where you started to close it. Click to add a small circle.' },
+  { id: 'draw', label: 'Draw', icon: 'draw', key: 'D', tip: 'Drag to draw a line to grow; it stops where it meets another line. End where you started to close it. Click between lines to add a small circle.' },
   { id: 'erase', label: 'Erase', icon: 'erase', key: 'E', tip: 'Click a line to remove it.' },
   { id: 'pan', label: 'Pan', icon: 'pan', key: 'H', tip: 'Drag to move the view. Holding Space pans with any tool.' },
 ]

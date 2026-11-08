@@ -39,7 +39,7 @@ Every control describes itself on hover or keyboard focus, with its shortcut. Un
 
 1. **Grow.** Press **Grow** or Space. The default circle fills a 200 mm disc in a few seconds. Change any force while it grows; Pause when you like the look.
 2. **Shape.** Choose a sheet size, a Rectangle or Ellipse boundary and a margin, or press **Import SVG…** (or drop an SVG on the window). Pick a start: Circle, Line, Circles, Outline, or Drawn lines.
-3. **Draw.** Drag on the sheet to draw a line to grow, end where you began to close it, or click for a small circle. Erase removes a line. Both work while lines grow.
+3. **Draw.** Drag on the sheet to draw a line to grow, end where you began to close it, or click between lines for a small circle. A drawn line stops where it meets another, and a circle shrinks to fit, so drawing never makes lines cross. Erase removes a line. Both work while lines grow.
 4. **Export.** **SVG** and **DXF** are real size for Illustrator, plotters and lasers. **PNG** is an image at the sheet's pixels per inch. **Save** writes a `.linegrowth.json` project you can reopen and keep growing.
 
 ### Working with Illustrator
@@ -132,11 +132,11 @@ What's new in the engine:
 
 - **A spatial grid** finds the nodes within the repel radius, so a step costs about the same per node at any count. The panel compared every node with every other node.
 - **A Web Worker** runs the growth, so drawing, editing and zooming stay smooth however slow a step gets. It sends the page one frame at a time, only after the page has drawn the last one.
-- **Lines never cross.** Repulsion keeps lines apart, but a fast fold or a dense, stiff packing can carry one edge across another between steps, which the panel allowed: with a small segment length, its rules crossed lines within 100 steps. Now any node whose move would make two edges cross stays where it was, checked again until nothing crosses. Moves that cross nothing are untouched, so ordinary growth is exactly the panel's.
+- **Lines never cross.** Repulsion keeps lines apart, but a fast fold or a dense, stiff packing can carry one edge across another between steps, which the panel allowed: with a small segment length, its rules crossed lines within 100 steps. Now any node whose move would make two edges cross stays where it was, checked again until nothing crosses. Edges that already crossed before the move, as lines in an imported drawing can, aren't held back, so they never freeze in place. Moves that cross nothing are untouched, so ordinary growth is exactly the panel's.
 - **Randomness** nudges each new node sideways by up to randomness × a quarter of its edge, using a hash of the seed, step and node, so even shapes break into organic folds and every run is repeatable. The nudge is part of the node's first move, so it is checked for crossings too.
 - **Determinism.** The same lines, settings and step count always give the same result, bit for bit. A test checks that a run saved half way, reopened and continued ends exactly where an uninterrupted run does, and another checks the engine against a copy of the panel's step.
 
-**Limits of the method.** Some settings are unstable: a repel radius of more than about five segment lengths (for example after halving only the segment length) packs so many nodes within reach that their pushes overwhelm the step, and lines judder in place, held back from crossing. The status warns when that happens. Scale the segment length, repel radius and step size together, or turn on Auto tune. Lines that cross in an imported drawing are left as they are. Nodes are only added, never removed, so a line can't shorten. The boundary and imported curves are short straight segments, within 0.02 mm of the drawn curve. Lengths in Auto tune follow the panel's rules, which were made for a node cap of 2,600, so large boundaries may need a higher Max nodes to fill.
+**Limits of the method.** Some settings are unstable: a repel radius of more than about five segment lengths (for example after halving only the segment length) packs so many nodes within reach that their pushes overwhelm the step, and lines judder in place, held back from crossing. The status warns when that happens. Scale the segment length, repel radius and step size together, or turn on Auto tune. Lines that cross in an imported drawing keep growing, but the check can't uncross them, so they may stay crossed. Nodes are only added, never removed, so a line can't shorten. The boundary and imported curves are short straight segments, within 0.02 mm of the drawn curve. Lengths in Auto tune follow the panel's rules, which were made for a node cap of 2,600, so large boundaries may need a higher Max nodes to fill.
 
 ## Known limits
 
@@ -175,7 +175,7 @@ src/
   useGrowth.ts         the design, undo history and the growth worker
   components/          panels, bars, stage, tooltip layer, dialogs
   growth/              the engine: growth step, boundary, start shapes, auto tune, geometry
-  lib/                 settings, units, design rules, project files, SVG import, SVG, DXF and PNG export
+  lib/                 settings, units, design rules, drawing by hand, project files, SVG import, SVG, DXF and PNG export
   worker/              the growth worker and its messages
 test-fixtures/         small SVGs the tests use, including Gil's pill outlines
 local/                 QA and timing scripts, not committed

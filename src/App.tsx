@@ -284,8 +284,11 @@ export function App() {
   // Many nodes held back from crossing on every step means the forces are out of balance, usually a repel
   // radius far larger than the segment length.
   const ratio = s.repelRadius / s.segmentLength
+  // The advice names the repel radius only when it is the likely cause, and Auto tune only when it's off.
   const strained = growth.running && stats.held > Math.max(40, stats.nodes * 0.02)
-    && `Lines are packed too tightly to move freely. The repel radius is ${ratio.toFixed(1)} segment lengths; keep it under about 5, or turn on Auto tune.`
+    && (ratio > 4
+      ? `Lines are packed too tightly to move freely. The repel radius is ${ratio.toFixed(1)} segment lengths; keep it under about 5${s.autoTune ? '' : ', or turn on Auto tune'}.`
+      : `Lines are packed too tightly to move freely. ${s.autoTune ? 'Try a lower Repulsion.' : 'Turn on Auto tune to balance the forces.'}`)
   const statusText = status?.text ?? (strained || (growth.stopping ? 'Stopping after the current step…'
     : growth.running ? `${stats.settling ? 'Settling at max nodes' : 'Growing'} · ${counts}` : counts))
 

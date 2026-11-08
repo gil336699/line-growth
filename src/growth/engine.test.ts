@@ -198,6 +198,22 @@ describe('growth step', () => {
     }
   })
 
+  it('lets lines that already cross move, rather than freezing them there', () => {
+    // Two lines laid across each other, as an imported drawing can have. Holding back every node of the two
+    // crossing edges would pin them in place for good.
+    const across = toStrand(Array.from({ length: 21 }, (_, i): Vec => [100 + i * 5, 150]), false)
+    const down = toStrand(Array.from({ length: 21 }, (_, i): Vec => [152, 102.5 + i * 5]), false)
+    const g = new Grower([across, down], 0, params({ randomness: 0 }), new Boundary([square]))
+    const before = g.strands.map(s => s.points.slice())
+    g.stepOnce()
+    expect(g.held).toBe(0)
+    // The nodes either side of the crossing at (152, 150) still move.
+    const moved = (s: number, k: number) => Math.hypot(g.strands[s].points[k * 2] - before[s][k * 2], g.strands[s].points[k * 2 + 1] - before[s][k * 2 + 1])
+    const nodeAt = (s: number, x: number, y: number) => Array.from({ length: g.strands[s].points.length / 2 }, (_, k) => k)
+      .find(k => before[s][k * 2] === x && before[s][k * 2 + 1] === y)!
+    for (const [s, x, y] of [[0, 150, 150], [0, 155, 150], [1, 152, 147.5], [1, 152, 152.5]]) expect(moved(s, nodeAt(s, x, y))).toBeGreaterThan(0)
+  })
+
   it('keeps settling at the node limit, and is the same run after run', () => {
     const run = (seed: number, steps: number) => {
       const g = new Grower([toStrand(resample(circle(150, 150, 20, 40), true, 9), true)], 0, params({ maxNodes: 120, randomness: 0.3, seed }), new Boundary([square]))

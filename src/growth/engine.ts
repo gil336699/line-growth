@@ -343,6 +343,13 @@ function buildEdgeGrid(NX: Float64Array, NY: Float64Array, edges: number[], next
   return { x0, y0, inv, cols, rows, start, items }
 }
 
+// Whether segments a0–a1 and b0–b1 cross at a point inside both. Touching or overlapping doesn't count.
+export function crossed(ax0: number, ay0: number, ax1: number, ay1: number, bx0: number, by0: number, bx1: number, by1: number): boolean {
+  const orient = (px: number, py: number, qx: number, qy: number, rx: number, ry: number) => (qx - px) * (ry - py) - (qy - py) * (rx - px)
+  return orient(ax0, ay0, ax1, ay1, bx0, by0) * orient(ax0, ay0, ax1, ay1, bx1, by1) < 0
+    && orient(bx0, by0, bx1, by1, ax0, ay0) * orient(bx0, by0, bx1, by1, ax1, ay1) < 0
+}
+
 // Keeps lines from crossing. Repulsion keeps lines apart, but a fast fold or a dense, stiff packing can carry
 // one edge across another between steps, which the Illustrator panel allowed. Any node whose move would make
 // two edges cross stays where it was, and the check repeats until no new crossing is left. Moves that cross
@@ -391,7 +398,10 @@ function untangle(strands: Strand[], X: Float64Array, Y: Float64Array, NX: Float
             if (!(d1 * d2 < 0)) continue
             const d3 = orient(bx0, by0, bx1, by1, ax0, ay0), d4 = orient(bx0, by0, bx1, by1, ax1, ay1)
             if (!(d3 * d4 < 0)) continue
-            // A crossing. Hold back whichever of its four nodes moved; one that was already there is left alone.
+            // Two edges that already crossed before the move, as lines drawn or imported across each other can,
+            // move freely: holding them back would freeze them there for good.
+            if (crossed(X[a0], Y[a0], X[a1], Y[a1], X[b0], Y[b0], X[b1], Y[b1])) continue
+            // A new crossing. Hold back whichever of its four nodes moved; one that was already there is left alone.
             for (const node of [a0, a1, b0, b1]) {
               if (stamp[node] === pass || (NX[node] === X[node] && NY[node] === Y[node])) continue
               stamp[node] = pass

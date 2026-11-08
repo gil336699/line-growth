@@ -3,6 +3,7 @@ import type { Boundary } from '../growth/boundary'
 import type { Strand } from '../growth/engine'
 import type { Polygon, Vec } from '../growth/geometry'
 import { clearance, type Path } from '../growth/seeds'
+import { crossesLines, crossesStroke, distanceToLines } from '../lib/drawing'
 import { drawGrowth } from '../lib/render'
 import type { Settings } from '../lib/settings'
 
@@ -12,10 +13,12 @@ export type StageControls = { fit: () => void; zoomBy: (factor: number) => void 
 type View = { zoom: number; panX: number; panY: number }
 type Drag =
   | { kind: 'pan'; startX: number; startY: number; panX: number; panY: number }
-  | { kind: 'draw'; points: Vec[]; travel: number; lastX: number; lastY: number }
+  // blocked: the stroke reached another line, or itself, and stops there.
+  | { kind: 'draw'; points: Vec[]; travel: number; lastX: number; lastY: number; blocked: boolean }
   | { kind: 'pinch'; distance: number; view: View; worldX: number; worldY: number }
 
 const ZOOM_MIN = 0.25, ZOOM_MAX = 60
+const STOPPED = 'Lines can’t cross, so the line stops where it meets one.'
 const FIT_PADDING = 20
 
 // The nearest line to a point, within `reach` millimetres.
@@ -172,15 +175,16 @@ export function Stage({ strands, rings, boundary, settings, tool, frameRef, cont
 
   const inside = (x: number, y: number): Vec => (boundary.empty || boundary.contains(x, y) ? [x, y] : boundary.closest(x, y))
 
-  // A finished stroke: a click adds a small circle, a stroke that ends where it began is closed.
+  // A finished stroke: a click adds a small circle, a stroke that ends where it began is closed. Neither
+  // crosses a line already there.
   const finishDraw = (d: Extract<Drag, { kind: 'draw' }>) => {
     const px = 1 / scale
     if (d.travel < 4 * px) {
       const [x, y] = d.points[0]
       if (!boundary.empty && !boundary.contains(x, y)) { onNotice('Draw inside the boundary.'); return }
-      const room = boundary.empty ? Infinity : clearance(boundary, x, y) * 0.9
+      const room = Math.min(boundary.empty ? Infinity : clearance(boundary, x, y), distanceToLines(live.current, x, y)) * 0.9
       const r = Math.min(Math.max(settings.repelRadius * 1.2, 8 * px), room)
-      if (!(r > 0)) return
+      if (!(r >= settings.segmentLength)) { onNotice('There’s no room for a circle there. Click between the lines.'); return }
       onDraw({ closed: true, points: Array.from({ length: 32 }, (_, i): Vec => [x + r * Math.cos((i / 32) * Math.PI * 2), y + r * Math.sin((i / 32) * Math.PI * 2)]) })
       return
     }
@@ -188,11 +192,17 @@ export function Stage({ strands, rings, boundary, settings, tool, frameRef, cont
     if (points.length < 2) return
     const first = points[0], last = points[points.length - 1]
     const near = Math.max(14 * px, settings.segmentLength * 2)
-    const closed = Math.hypot(first[0] - last[0], first[1] - last[1]) <= near && d.travel > near * 4
-    // A closed stroke drops its last points where they double back over the start.
+    let closed = Math.hypot(first[0] - last[0], first[1] - last[1]) <= near && d.travel > near * 4
+    // A closed stroke drops its last points where they double back over the start. One whose closing edge
+    // would cross a line stays open.
     let trimmed = points
-    if (closed) while (trimmed.length > 3 && Math.hypot(trimmed[trimmed.length - 1][0] - first[0], trimmed[trimmed.length - 1][1] - first[1]) < near / 2) trimmed = trimmed.slice(0, -1)
+    if (closed) {
+      while (trimmed.length > 3 && Math.hypot(trimmed[trimmed.length - 1][0] - first[0], trimmed[trimmed.length - 1][1] - first[1]) < near / 2) trimmed = trimmed.slice(0, -1)
+      const end = trimmed[trimmed.length - 1]
+      if (crossesLines(live.current, end, first) || crossesStroke(trimmed, end, first, true)) { closed = false; trimmed = points }
+    }
     onDraw({ closed, points: trimmed })
+    if (d.blocked) onNotice(STOPPED)
   }
 
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -223,7 +233,7 @@ export function Stage({ strands, rings, boundary, settings, tool, frameRef, cont
       return
     }
     const p = inside(x, y)
-    drag.current = { kind: 'draw', points: [p], travel: 0, lastX: x, lastY: y }
+    drag.current = { kind: 'draw', points: [p], travel: 0, lastX: x, lastY: y, blocked: false }
     setDraft([p])
   }
 
@@ -244,9 +254,15 @@ export function Stage({ strands, rings, boundary, settings, tool, frameRef, cont
     const [x, y] = toWorld(event.clientX, event.clientY)
     if (d?.kind === 'draw') {
       const step = Math.hypot(x - d.lastX, y - d.lastY)
-      if (step < 1.5 / scale) return
+      if (d.blocked || step < 1.5 / scale) return
+      const a = d.points[d.points.length - 1], b = inside(x, y)
+      if (crossesLines(live.current, a, b) || crossesStroke(d.points, a, b)) {
+        d.blocked = true
+        onNotice(STOPPED)
+        return
+      }
       d.travel += step; d.lastX = x; d.lastY = y
-      d.points.push(inside(x, y))
+      d.points.push(b)
       setDraft([...d.points])
       return
     }
