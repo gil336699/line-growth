@@ -1,0 +1,20 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.log
+.env
+.env.*
+.claude/
+
+# Files people make with the app
+*.linegrowth.json
+!test-fixtures/*.linegrowth.json
+*.dxf
+*.png
+*.svg
+!public/*.svg
+!test-fixtures/*.svg
+
+# Local test files and QA scripts
+local/

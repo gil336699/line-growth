@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Illustrator-style test drawing: a 400 × 300 pt artboard, a closed blob with a round hole as one compound
+     path (the boundary), an open curve and a small circle to grow, and a line left wholly outside the blob. -->
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+  <defs><style>.cls-1 { fill: none; stroke: #000; }</style></defs>
+  <path class="cls-1" d="M60 150C60 60 160 30 230 50C330 78 360 150 330 220C300 280 160 290 100 250C70 230 60 190 60 150ZM260 150a20 20 0 1 0 40 0a20 20 0 1 0-40 0Z"/>
+  <path class="cls-1" d="M120 120C140 100 170 140 190 120"/>
+  <circle class="cls-1" cx="160" cy="200" r="12"/>
+  <line class="cls-1" x1="5" y1="290" x2="40" y2="295"/>
+</svg>

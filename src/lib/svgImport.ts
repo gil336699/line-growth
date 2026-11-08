@@ -1,0 +1,358 @@
+// Reads every path in an SVG file, open and closed, in millimetres on the file's own page, so a drawing from
+// Illustrator can become the boundary and the lines to grow, and the result lines up with it again. Plain
+// TypeScript with no DOM, so it runs in tests too. Curves and arcs are flattened into short straight
+// segments and transforms are applied.
+import type { Vec } from '../growth/geometry'
+import type { SizedBy } from './design'
+
+export type SvgPath = { closed: boolean; points: Vec[]; element: number } // element: subpaths of one compound path share it
+export type SvgDrawing = {
+  width: number; height: number // the page, in mm
+  paths: SvgPath[] // in file order
+  units: SizedBy // 'file': the file gives its size; 'css': assumed 96 per inch; 'illustrator': assumed 72 per inch
+}
+export class SvgShapeError extends Error {}
+
+const MM: Record<string, number> = { mm: 1, cm: 10, q: 0.25, in: 25.4, pt: 25.4 / 72, pc: 25.4 / 6, px: 25.4 / 96, '': 25.4 / 96 }
+// Elements whose contents are never drawn directly, or aren't outlines.
+const SKIP = new Set(['defs', 'symbol', 'clippath', 'mask', 'pattern', 'marker', 'style', 'script', 'title', 'desc', 'metadata',
+  'text', 'foreignobject', 'lineargradient', 'radialgradient', 'filter', 'image', 'switch'])
+const MAX_POINTS = 400_000
+
+type Matrix = [number, number, number, number, number, number] // x' = a x + c y + e, y' = b x + d y + f
+const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0]
+const multiply = (m: Matrix, n: Matrix): Matrix => [
+  m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1],
+  m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3],
+  m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5],
+]
+const apply = (m: Matrix, [x, y]: Vec): Vec => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]
+const matrixScale = (m: Matrix) => Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])) || 1
+
+const NUMBER = /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/g
+const STICKY_NUMBER = new RegExp(NUMBER.source, 'y')
+const numbers = (text: string) => (text.match(NUMBER) ?? []).map(Number)
+
+export function parseTransform(text: string | undefined): Matrix {
+  let m = IDENTITY
+  if (!text) return m
+  for (const [, name, args] of text.matchAll(/(matrix|translate|scale|rotate|skewX|skewY)\s*\(([^)]*)\)/g)) {
+    const v = numbers(args)
+    let t: Matrix = IDENTITY
+    if (name === 'matrix' && v.length >= 6) t = [v[0], v[1], v[2], v[3], v[4], v[5]]
+    else if (name === 'translate') t = [1, 0, 0, 1, v[0] ?? 0, v[1] ?? 0]
+    else if (name === 'scale') t = [v[0] ?? 1, 0, 0, v[1] ?? v[0] ?? 1, 0, 0]
+    else if (name === 'rotate') {
+      const a = ((v[0] ?? 0) * Math.PI) / 180, cos = Math.cos(a), sin = Math.sin(a)
+      const [cx, cy] = [v[1] ?? 0, v[2] ?? 0]
+      t = multiply(multiply([1, 0, 0, 1, cx, cy], [cos, sin, -sin, cos, 0, 0]), [1, 0, 0, 1, -cx, -cy])
+    } else if (name === 'skewX') t = [1, 0, Math.tan(((v[0] ?? 0) * Math.PI) / 180), 1, 0, 0]
+    else if (name === 'skewY') t = [1, Math.tan(((v[0] ?? 0) * Math.PI) / 180), 0, 1, 0, 0]
+    m = multiply(m, t)
+  }
+  return m
+}
+
+// ---------- path data ----------
+
+type Subpath = { points: Vec[]; closed: boolean }
+
+function cubic(out: Vec[], p0: Vec, p1: Vec, p2: Vec, p3: Vec, tol: number, depth = 0) {
+  // Flat enough when both control points are within tol of the chord.
+  const dx = p3[0] - p0[0], dy = p3[1] - p0[1], len = Math.hypot(dx, dy)
+  const d1 = len > 1e-12 ? Math.abs((p1[0] - p0[0]) * dy - (p1[1] - p0[1]) * dx) / len : Math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+  const d2 = len > 1e-12 ? Math.abs((p2[0] - p0[0]) * dy - (p2[1] - p0[1]) * dx) / len : Math.hypot(p2[0] - p0[0], p2[1] - p0[1])
+  if (depth >= 16 || Math.max(d1, d2) <= tol) { out.push(p3); return }
+  const mid = (a: Vec, b: Vec): Vec => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
+  const a = mid(p0, p1), b = mid(p1, p2), c = mid(p2, p3), ab = mid(a, b), bc = mid(b, c), m = mid(ab, bc)
+  cubic(out, p0, a, ab, m, tol, depth + 1)
+  cubic(out, m, bc, c, p3, tol, depth + 1)
+}
+
+// SVG's endpoint arc, turned into points (SVG spec, appendix F.6).
+function arc(out: Vec[], p0: Vec, rx: number, ry: number, rotation: number, large: boolean, sweep: boolean, p1: Vec, tol: number) {
+  rx = Math.abs(rx); ry = Math.abs(ry)
+  if (rx < 1e-12 || ry < 1e-12 || (p0[0] === p1[0] && p0[1] === p1[1])) { out.push(p1); return }
+  const phi = (rotation * Math.PI) / 180, cos = Math.cos(phi), sin = Math.sin(phi)
+  const hx = (p0[0] - p1[0]) / 2, hy = (p0[1] - p1[1]) / 2
+  const x1 = cos * hx + sin * hy, y1 = -sin * hx + cos * hy
+  const lambda = (x1 * x1) / (rx * rx) + (y1 * y1) / (ry * ry)
+  if (lambda > 1) { rx *= Math.sqrt(lambda); ry *= Math.sqrt(lambda) }
+  const num = rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1
+  const den = rx * rx * y1 * y1 + ry * ry * x1 * x1
+  const k = (large === sweep ? -1 : 1) * Math.sqrt(Math.max(0, num / den))
+  const cxp = (k * rx * y1) / ry, cyp = (-k * ry * x1) / rx
+  const cx = cos * cxp - sin * cyp + (p0[0] + p1[0]) / 2, cy = sin * cxp + cos * cyp + (p0[1] + p1[1]) / 2
+  const angle = (ux: number, uy: number, vx: number, vy: number) => Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy)
+  const t0 = angle(1, 0, (x1 - cxp) / rx, (y1 - cyp) / ry)
+  let dt = angle((x1 - cxp) / rx, (y1 - cyp) / ry, (-x1 - cxp) / rx, (-y1 - cyp) / ry)
+  if (!sweep && dt > 0) dt -= Math.PI * 2
+  if (sweep && dt < 0) dt += Math.PI * 2
+  const r = Math.max(rx, ry)
+  const step = tol < r ? 2 * Math.acos(1 - tol / r) : Math.PI / 2
+  const n = Math.min(1000, Math.max(1, Math.ceil(Math.abs(dt) / step)))
+  for (let i = 1; i <= n; i++) {
+    const t = t0 + (dt * i) / n
+    const ex = rx * Math.cos(t), ey = ry * Math.sin(t)
+    out.push(i === n ? p1 : [cos * ex - sin * ey + cx, sin * ex + cos * ey + cy])
+  }
+}
+
+export function parsePathData(d: string, tol: number): Subpath[] {
+  const subpaths: Subpath[] = []
+  let i = 0
+  const skip = () => { while (i < d.length && /[\s,]/.test(d[i])) i++ }
+  const peekNumber = () => { skip(); return i < d.length && /[+\-.\d]/.test(d[i]) }
+  const readNumber = () => {
+    skip()
+    STICKY_NUMBER.lastIndex = i
+    const m = STICKY_NUMBER.exec(d)
+    if (!m) throw new SvgShapeError('A path in this SVG has damaged data.')
+    i += m[0].length
+    return Number(m[0])
+  }
+  const readFlag = () => { skip(); const c = d[i++]; if (c !== '0' && c !== '1') throw new SvgShapeError('A path in this SVG has a damaged arc.'); return c === '1' }
+
+  // Asserted, not annotated: the helpers below reassign it, which narrowing can't see.
+  let current = null as Subpath | null
+  let x = 0, y = 0, startX = 0, startY = 0
+  let lastCtrl: Vec | null = null, lastQuad: Vec | null = null
+  let command = ''
+  const begin = (px: number, py: number) => {
+    if (current && current.points.length) subpaths.push(current)
+    current = { points: [[px, py]], closed: false }
+    startX = px; startY = py
+  }
+  const lineTo = (px: number, py: number) => { if (!current) begin(x, y); current!.points.push([px, py]) }
+
+  while (i < d.length) {
+    skip()
+    if (i >= d.length) break
+    if (/[A-Za-z]/.test(d[i])) command = d[i++]
+    else if (!command) throw new SvgShapeError('A path in this SVG has damaged data.')
+    const rel = command === command.toLowerCase()
+    const C = command.toUpperCase()
+    const ox = rel ? x : 0, oy = rel ? y : 0
+    switch (C) {
+      case 'M': {
+        const px = readNumber() + ox, py = readNumber() + oy
+        begin(px, py); x = px; y = py
+        command = rel ? 'l' : 'L' // later pairs are line-tos
+        lastCtrl = lastQuad = null
+        break
+      }
+      case 'L': { const px = readNumber() + ox, py = readNumber() + oy; lineTo(px, py); x = px; y = py; lastCtrl = lastQuad = null; break }
+      case 'H': { const px = readNumber() + ox; lineTo(px, y); x = px; lastCtrl = lastQuad = null; break }
+      case 'V': { const py = readNumber() + oy; lineTo(x, py); y = py; lastCtrl = lastQuad = null; break }
+      case 'C': case 'S': {
+        let c1: Vec
+        if (C === 'C') c1 = [readNumber() + ox, readNumber() + oy]
+        else c1 = lastCtrl ? [2 * x - lastCtrl[0], 2 * y - lastCtrl[1]] : [x, y]
+        const c2: Vec = [readNumber() + ox, readNumber() + oy], p: Vec = [readNumber() + ox, readNumber() + oy]
+        if (!current) begin(x, y)
+        cubic(current!.points, [x, y], c1, c2, p, tol)
+        lastCtrl = c2; lastQuad = null; x = p[0]; y = p[1]
+        break
+      }
+      case 'Q': case 'T': {
+        let q: Vec
+        if (C === 'Q') q = [readNumber() + ox, readNumber() + oy]
+        else q = lastQuad ? [2 * x - lastQuad[0], 2 * y - lastQuad[1]] : [x, y]
+        const p: Vec = [readNumber() + ox, readNumber() + oy]
+        if (!current) begin(x, y)
+        cubic(current!.points, [x, y], [x + (2 / 3) * (q[0] - x), y + (2 / 3) * (q[1] - y)], [p[0] + (2 / 3) * (q[0] - p[0]), p[1] + (2 / 3) * (q[1] - p[1])], p, tol)
+        lastQuad = q; lastCtrl = null; x = p[0]; y = p[1]
+        break
+      }
+      case 'A': {
+        const rx = readNumber(), ry = readNumber(), rotation = readNumber(), large = readFlag(), sweep = readFlag()
+        const p: Vec = [readNumber() + ox, readNumber() + oy]
+        if (!current) begin(x, y)
+        arc(current!.points, [x, y], rx, ry, rotation, large, sweep, p, tol)
+        x = p[0]; y = p[1]; lastCtrl = lastQuad = null
+        break
+      }
+      case 'Z': {
+        if (current) { current.closed = true; subpaths.push(current); current = null }
+        x = startX; y = startY; lastCtrl = lastQuad = null
+        command = '' // a number right after Z is an error, but a new command letter is fine
+        continue
+      }
+      default: throw new SvgShapeError(`This SVG uses a path command (${command}) that isn't part of SVG.`)
+    }
+    // More numbers without a letter repeat the same command; otherwise the next letter is read.
+    if (!peekNumber() && i < d.length && !/[A-Za-z]/.test(d[i])) throw new SvgShapeError('A path in this SVG has damaged data.')
+  }
+  if (current && current.points.length) subpaths.push(current)
+  return subpaths
+}
+
+// ---------- elements ----------
+
+type Attributes = Record<string, string>
+const ATTRIBUTE = /([A-Za-z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g
+function attributesOf(text: string): Attributes {
+  const out: Attributes = {}
+  for (const m of text.matchAll(ATTRIBUTE)) out[m[1].toLowerCase()] = m[2] ?? m[3] ?? ''
+  return out
+}
+const hidden = (a: Attributes) => /(^|;)\s*display\s*:\s*none/i.test(a.style ?? '') || a.display === 'none'
+
+// A length in millimetres, or null when it's missing or a percentage.
+function lengthMm(text: string | undefined): number | null {
+  if (!text) return null
+  const m = /^\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*([a-zA-Z%]*)\s*$/.exec(text)
+  if (!m) return null
+  const unit = m[2].toLowerCase()
+  if (!(unit in MM)) return null
+  return Number(m[1]) * MM[unit]
+}
+const unitOf = (text: string | undefined) => /([a-zA-Z%]*)\s*$/.exec(text ?? '')?.[1].toLowerCase() ?? ''
+
+function ellipsePoints(cx: number, cy: number, rx: number, ry: number, tol: number): Vec[] {
+  const r = Math.max(rx, ry)
+  const step = tol < r ? 2 * Math.acos(1 - tol / r) : Math.PI / 2
+  const n = Math.min(2000, Math.max(8, Math.ceil((Math.PI * 2) / step)))
+  return Array.from({ length: n }, (_, i): Vec => [cx + rx * Math.cos((i / n) * Math.PI * 2), cy + ry * Math.sin((i / n) * Math.PI * 2)])
+}
+
+function rectPoints(a: Attributes, tol: number): Vec[] | null {
+  const x = Number(a.x ?? 0) || 0, y = Number(a.y ?? 0) || 0, w = Number(a.width), h = Number(a.height)
+  if (!(w > 0 && h > 0)) return null
+  let rx = a.rx !== undefined ? Number(a.rx) : NaN, ry = a.ry !== undefined ? Number(a.ry) : NaN
+  if (!Number.isFinite(rx)) rx = Number.isFinite(ry) ? ry : 0
+  if (!Number.isFinite(ry)) ry = rx
+  rx = Math.min(Math.max(0, rx), w / 2); ry = Math.min(Math.max(0, ry), h / 2)
+  if (rx < 1e-12 || ry < 1e-12) return [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
+  const d = `M${x + rx} ${y}H${x + w - rx}A${rx} ${ry} 0 0 1 ${x + w} ${y + ry}V${y + h - ry}A${rx} ${ry} 0 0 1 ${x + w - rx} ${y + h}`
+    + `H${x + rx}A${rx} ${ry} 0 0 1 ${x} ${y + h - ry}V${y + ry}A${rx} ${ry} 0 0 1 ${x + rx} ${y}Z`
+  return parsePathData(d, tol)[0]?.points ?? null
+}
+
+// Every path drawn by one element, in its own coordinates. Open paths whose ends meet count as closed.
+function pathsOf(name: string, a: Attributes, tol: number): { closed: boolean; points: Vec[] }[] {
+  const out: { closed: boolean; points: Vec[] }[] = []
+  const add = (points: Vec[], closed: boolean) => {
+    if (points.length < 2) return
+    const first = points[0], last = points[points.length - 1]
+    const meets = points.length > 2 && Math.hypot(first[0] - last[0], first[1] - last[1]) <= tol * 4
+    if (closed || meets) {
+      const ring = meets ? points.slice(0, -1) : points
+      if (ring.length >= 3) out.push({ closed: true, points: ring })
+      else if (ring.length === 2) out.push({ closed: false, points: ring })
+    } else out.push({ closed: false, points })
+  }
+  if (name === 'path' && a.d) for (const sub of parsePathData(a.d, tol)) add(sub.points, sub.closed)
+  else if (name === 'rect') { const p = rectPoints(a, tol); if (p) add(p, true) }
+  else if (name === 'circle') { const r = Number(a.r); if (r > 0) add(ellipsePoints(Number(a.cx ?? 0) || 0, Number(a.cy ?? 0) || 0, r, r, tol), true) }
+  else if (name === 'ellipse') {
+    const rx = Number(a.rx), ry = Number(a.ry ?? a.rx)
+    if (rx > 0 && ry > 0) add(ellipsePoints(Number(a.cx ?? 0) || 0, Number(a.cy ?? 0) || 0, rx, ry, tol), true)
+  } else if (name === 'polygon' || name === 'polyline') {
+    const v = numbers(a.points ?? '')
+    const points: Vec[] = []
+    for (let k = 0; k + 1 < v.length; k += 2) points.push([v[k], v[k + 1]])
+    add(points, name === 'polygon')
+  } else if (name === 'line') add([[Number(a.x1 ?? 0) || 0, Number(a.y1 ?? 0) || 0], [Number(a.x2 ?? 0) || 0, Number(a.y2 ?? 0) || 0]], false)
+  return out
+}
+
+// Every path in a file, in millimetres from the page's top-left corner. tolerance: how far flattened curves
+// may stray, in mm.
+export function readSvgDrawing(text: string, tolerance = 0.02): SvgDrawing {
+  if (!/<svg[\s>]/i.test(text)) throw new SvgShapeError('This file is not an SVG drawing.')
+  const illustrator = /Adobe Illustrator/i.test(text) || /data-name\s*=/.test(text)
+  const body = text.replace(/<!--[\s\S]*?-->/g, '').replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '').replace(/<\?[\s\S]*?\?>/g, '').replace(/<!DOCTYPE[\s\S]*?>/gi, '')
+
+  const paths: SvgPath[] = []
+  let total = 0, element = 0, units: SizedBy = 'css'
+  let rootScale = 0 // millimetres per user unit
+  let pageW = 0, pageH = 0
+  type Frame = { name: string; m: Matrix; skip: boolean }
+  const stack: Frame[] = []
+  for (const tag of body.matchAll(/<(\/?)([A-Za-z_][\w:.-]*)([^>]*?)(\/?)>/g)) {
+    const [, closing, rawName, rest, selfClosing] = tag
+    const name = rawName.toLowerCase().replace(/^svg:/, '')
+    if (closing) {
+      // Pop back to the matching element; stray closing tags are ignored.
+      const at = stack.map(f => f.name).lastIndexOf(name)
+      if (at >= 0) stack.length = at
+      continue
+    }
+    const a = attributesOf(rest)
+    const parent = stack[stack.length - 1]
+    let m = parent ? parent.m : IDENTITY
+    const skip = Boolean(parent?.skip) || SKIP.has(name) || hidden(a)
+    if (name === 'svg' && !parent) {
+      const vb = numbers(a.viewbox ?? '')
+      const w = lengthMm(a.width), h = lengthMm(a.height)
+      const px = (u: string) => u === '' || u === 'px'
+      const perPx = illustrator ? 25.4 / 72 : 25.4 / 96
+      units = illustrator && (px(unitOf(a.width)) || a.width === undefined) ? 'illustrator' : 'css'
+      if (vb.length === 4 && vb[2] > 0 && vb[3] > 0) {
+        const sx = w !== null ? (px(unitOf(a.width)) ? (Number(numbers(a.width!)[0]) * perPx) : w) / vb[2] : null
+        const sy = h !== null ? (px(unitOf(a.height)) ? (Number(numbers(a.height!)[0]) * perPx) : h) / vb[3] : null
+        rootScale = sx !== null && sy !== null ? Math.min(sx, sy) : sx ?? sy ?? perPx
+        if ((w !== null && !px(unitOf(a.width))) || (h !== null && !px(unitOf(a.height)))) units = 'file'
+        m = multiply([rootScale, 0, 0, rootScale, 0, 0], [1, 0, 0, 1, -vb[0], -vb[1]])
+        pageW = vb[2] * rootScale; pageH = vb[3] * rootScale
+      } else {
+        rootScale = perPx // without a viewBox, user units are pixels whatever the size says
+        if (w !== null && !px(unitOf(a.width))) units = 'file'
+        m = [rootScale, 0, 0, rootScale, 0, 0]
+        const pw = Number(numbers(a.width ?? '')[0]), ph = Number(numbers(a.height ?? '')[0])
+        pageW = w !== null && !px(unitOf(a.width)) ? w : (pw || 0) * rootScale
+        pageH = h !== null && !px(unitOf(a.height)) ? h : (ph || 0) * rootScale
+      }
+    } else if (name === 'svg') {
+      m = multiply(m, [1, 0, 0, 1, Number(a.x ?? 0) || 0, Number(a.y ?? 0) || 0])
+    }
+    if (a.transform) m = multiply(m, parseTransform(a.transform))
+    if (!skip && ['path', 'rect', 'circle', 'ellipse', 'polygon', 'polyline', 'line'].includes(name)) {
+      const tol = tolerance / Math.max(1e-12, matrixScale(m))
+      const found = pathsOf(name, a, tol)
+      for (const path of found) {
+        total += path.points.length
+        if (total > MAX_POINTS) throw new SvgShapeError('This SVG has too much detail to read. Simplify it and try again.')
+        paths.push({ closed: path.closed, points: path.points.map(p => apply(m, p)), element })
+      }
+      element++
+    }
+    if (!selfClosing) stack.push({ name, m, skip })
+  }
+  if (!rootScale) throw new SvgShapeError('This file is not an SVG drawing.')
+  if (!paths.length) throw new SvgShapeError('This SVG has no paths or shapes to use.')
+  // Without a usable page size, the drawing's own extent is the page.
+  if (!(pageW > 0 && pageH > 0)) {
+    let x1 = 0, y1 = 0
+    for (const p of paths) for (const [x, y] of p.points) { x1 = Math.max(x1, x); y1 = Math.max(y1, y) }
+    pageW = x1; pageH = y1
+  }
+  return { width: pageW, height: pageH, paths, units }
+}
+
+// ---------- Capture ----------
+
+export type Capture = { boundary: Vec[][] | null; grow: { closed: boolean; points: Vec[] }[]; outside: number }
+
+const boxArea = (points: Vec[]) => {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+  for (const [x, y] of points) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y) }
+  return Math.max(0, x1 - x0) * Math.max(0, y1 - y0)
+}
+
+// The Illustrator panel's Capture rule: the largest closed path is the boundary, and every other path grows.
+// Holes drawn into the boundary as one compound path stay part of it. Lines wholly outside it are left out.
+export function captureDrawing(drawing: SvgDrawing, inside?: (x: number, y: number) => boolean): Capture {
+  let best = -1, bestArea = -1
+  drawing.paths.forEach((p, i) => { if (p.closed) { const a = boxArea(p.points); if (a > bestArea) { bestArea = a; best = i } } })
+  const element = best >= 0 ? drawing.paths[best].element : -1
+  const boundary = best >= 0 ? drawing.paths.filter(p => p.element === element && p.closed).map(p => p.points) : null
+  let outside = 0
+  const grow = drawing.paths.filter(p => !(p.element === element && p.closed)).filter(p => {
+    if (!inside || p.points.some(([x, y]) => inside(x, y))) return true
+    outside++
+    return false
+  }).map(p => ({ closed: p.closed, points: p.points }))
+  return { boundary, grow, outside }
+}
