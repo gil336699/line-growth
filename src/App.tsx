@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Dock, Inspector, ViewBar, type ViewKey } from './components/Bars'
 import { FilePanel, type ExportKind } from './components/FilePanel'
 import { GrowPanel } from './components/GrowPanel'
@@ -84,6 +84,8 @@ export function App() {
 
   const rings = boundaryRings(s, design.imported)
   const boundary = boundaryOf(rings)
+  // The fixed points along the boundary, as the engine spaces them, for the measurements.
+  const boundaryPoints = useMemo(() => boundary.repellers(Math.max(s.segmentLength, boundary.length / 20_000)).x.length, [boundary, s.segmentLength])
   // The lines as the worker last sent them; stats.revision changes with every frame.
   const strands = growth.live.current.strands
 
@@ -335,7 +337,7 @@ export function App() {
     </div>
 
     <aside className="inspector side-panel glass" aria-label="Measurements">
-      <Inspector s={s} stats={stats} boundaryLength={boundary.length} />
+      <Inspector s={s} stats={stats} boundaryLength={boundary.length} boundaryPoints={boundaryPoints} />
     </aside>
 
     {pending && <ConfirmDialog pending={pending} onCancel={() => setPending(null)} />}

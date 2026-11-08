@@ -21,7 +21,7 @@ export const GrowPanel = memo(function GrowPanel({ s, change, onShuffle }: { s: 
   return <>
     <Section title="Growth">
       <SwitchField label="Auto tune" checked={s.autoTune}
-        tip="Choose growth settings to suit the boundary and start shape whenever either changes, as the Illustrator panel did on Capture. Turn off to keep your own."
+        tip="Choose growth settings to suit the boundary and start shape, now and whenever either changes, as the Illustrator panel did on Capture. Turn off to keep your own."
         onChange={autoTune => change({ autoTune }, 'autoTune')} />
       <RangeField label="Max nodes" value={s.maxNodes} min={LIMITS.maxNodes[0]} max={LIMITS.maxNodes[1]} step={1} digits={0} log
         tip="Most points the lines can have. More nodes grow longer, more detailed lines and take longer. At the limit the lines keep settling."
@@ -48,7 +48,7 @@ export const GrowPanel = memo(function GrowPanel({ s, change, onShuffle }: { s: 
       <LengthRange s={s} k="stepSize" label="Step size" change={change}
         tip="How far nodes move on each step. Larger changes faster but can become unstable." />
       <RangeField label="Randomness" value={s.randomness * 100} min={0} max={100} step={1} digits={0} suffix="%"
-        tip="How far each new node is nudged sideways, so even shapes break into organic folds. At 0 % growth follows the Illustrator panel exactly."
+        tip="How far each new node is nudged sideways, so even shapes break into organic folds. At 0 % growth follows the Illustrator panel’s rules."
         onChange={value => change({ randomness: value / 100 }, 'randomness')} />
       <div className="seed-row">
         <NumberField label="Seed" value={s.seed} min={LIMITS.seed[0]} max={LIMITS.seed[1]}

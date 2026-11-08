@@ -73,7 +73,7 @@ export function Dock({ running, stopping, canGrow, onGrow, onPause, onStep, onRe
 }
 
 // Memoised on the numbers it shows, so it redraws with the frame counter only.
-export const Inspector = memo(function Inspector({ s, stats, boundaryLength }: { s: Settings; stats: Stats; boundaryLength: number }) {
+export const Inspector = memo(function Inspector({ s, stats, boundaryLength, boundaryPoints }: { s: Settings; stats: Stats; boundaryLength: number; boundaryPoints: number }) {
   const length = stats.length
   const L = (mm: number) => formatLength(mm, s.units, s.dpi, true)
   const rows: [string, string, string][] = [
@@ -83,7 +83,7 @@ export const Inspector = memo(function Inspector({ s, stats, boundaryLength }: {
     ['Steps', stats.step.toLocaleString(), 'Growth steps since the start lines.'],
     ['Line length', formatLong(length, s.units), 'Total length of every line, to estimate plotter or laser time.'],
     ['Average segment', stats.nodes > stats.lines ? L(length / Math.max(1, stats.nodes - stats.lines)) : '—', 'Average distance between neighbouring nodes. Growth aims for the segment length.'],
-    ['Boundary', formatLong(boundaryLength, s.units), 'Length of the boundary the lines grow inside.'],
+    ['Boundary', `${formatLong(boundaryLength, s.units)} · ${boundaryPoints.toLocaleString()} points`, 'Length of the boundary, and the fixed points along it, one segment length apart, that push the lines away from the edge.'],
     ['Speed', stats.rate ? `${Math.round(stats.rate).toLocaleString()} steps/s` : '—', 'Steps per second while growing.'],
   ]
   return <section className="measurements" aria-labelledby="measure-title">

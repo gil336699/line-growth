@@ -86,52 +86,58 @@ export function shareBudget(needs: number[], budget: number): number[] {
   return caps
 }
 
-// Splits long edges at their middles, each new node nudged sideways by up to randomness × a quarter of the
-// edge. Edges are split depth first, in order along the strand, as the panel's repeated passes did, so a
-// budget cuts off the same nodes. Returns the new points, or null when nothing changes; with count only,
-// returns how many splits it would make (as a length-1 array).
-function splitStrand(strand: Strand, split: number, cap: number, randomness: number, seed: number, step: number, index: number, countOnly: boolean): Float64Array | null {
+// Splits long edges at their middles. Edges are split depth first, in order along the strand, as the panel's
+// repeated passes did, so a budget cuts off the same nodes. With randomness, each new node also gets a sideways
+// nudge of up to randomness × a quarter of its edge, applied as part of this step's move, so the crossing check
+// sees it. Returns the new points and nudges, or null when nothing changes; with countOnly, just the count.
+type Split = { points: Float64Array; nudges: Float64Array | null }
+function splitStrand(strand: Strand, split: number, cap: number, randomness: number, seed: number, step: number, index: number, countOnly: true): number
+function splitStrand(strand: Strand, split: number, cap: number, randomness: number, seed: number, step: number, index: number, countOnly: false): Split | null
+function splitStrand(strand: Strand, split: number, cap: number, randomness: number, seed: number, step: number, index: number, countOnly: boolean): number | Split | null {
   const p = strand.points, n = p.length / 2
   const edges = strand.closed ? n : n - 1
-  const out: number[] = []
+  const out: number[] = [], nudges: number[] = []
   let made = 0
   const visit = (ax: number, ay: number, bx: number, by: number) => {
     const dx = bx - ax, dy = by - ay
     const d = Math.sqrt(dx * dx + dy * dy)
     if (made >= cap || !(d > split)) return
     const k = made++
-    let mx = (ax + bx) / 2, my = (ay + by) / 2
-    if (randomness > 0 && d > 0) {
-      const offset = (noise(seed, step, index, k) * 2 - 1) * randomness * 0.25 * d
-      mx += (-dy / d) * offset; my += (dx / d) * offset
-    }
+    const mx = (ax + bx) / 2, my = (ay + by) / 2
     visit(ax, ay, mx, my)
-    if (!countOnly) out.push(mx, my)
+    if (!countOnly) {
+      out.push(mx, my)
+      const offset = randomness > 0 && d > 0 ? (noise(seed, step, index, k) * 2 - 1) * randomness * 0.25 * d : 0
+      nudges.push((-dy / d) * offset, (dx / d) * offset)
+    }
     visit(mx, my, bx, by)
   }
   for (let i = 0; i < n; i++) {
-    if (!countOnly) out.push(p[i * 2], p[i * 2 + 1])
+    if (!countOnly) { out.push(p[i * 2], p[i * 2 + 1]); nudges.push(0, 0) }
     if (i < edges) {
       const j = (i + 1) % n
       visit(p[i * 2], p[i * 2 + 1], p[j * 2], p[j * 2 + 1])
     }
   }
-  if (countOnly) return Float64Array.of(made)
-  return made ? Float64Array.from(out) : null
+  if (countOnly) return made
+  return made ? { points: Float64Array.from(out), nudges: randomness > 0 ? Float64Array.from(nudges) : null } : null
 }
 
-export function subdivide(strands: Strand[], params: GrowthParams, step: number): void {
+// Splits long edges on every strand. Returns each strand's nudges for this step (null when it has none).
+export function subdivide(strands: Strand[], params: GrowthParams, step: number): (Float64Array | null)[] {
+  const nudges: (Float64Array | null)[] = strands.map(() => null)
   const total = strands.reduce((sum, s) => sum + s.points.length / 2, 0)
   const budget = Math.floor(params.maxNodes) - total
-  if (budget <= 0 || total < 2) return
+  if (budget <= 0 || total < 2) return nudges
   const split = params.segmentLength * SPLIT_FACTOR
-  const needs = strands.map((s, i) => s.points.length >= 4 ? splitStrand(s, split, budget, params.randomness, params.seed, step, i, true)![0] : 0)
+  const needs = strands.map((s, i) => s.points.length >= 4 ? splitStrand(s, split, budget, params.randomness, params.seed, step, i, true) : 0)
   const caps = shareBudget(needs, budget)
   strands.forEach((s, i) => {
     if (!caps[i]) return
     const next = splitStrand(s, split, caps[i], params.randomness, params.seed, step, i, false)
-    if (next) s.points = next
+    if (next) { s.points = next.points; nudges[i] = next.nudges }
   })
+  return nudges
 }
 
 export const nodeCount = (strands: Strand[]) => strands.reduce((sum, s) => sum + s.points.length / 2, 0)
@@ -178,7 +184,7 @@ export class Grower {
     const total = this.nodes
     if (total < 2) return false
     const p = this.params
-    subdivide(this.strands, p, this.step)
+    const nudges = subdivide(this.strands, p, this.step)
     const strands = this.strands
     const n = nodeCount(strands)
     if (this.X.length < n) {
@@ -278,19 +284,97 @@ export class Grower {
       off += m
     }
 
+    // New nodes' sideways nudges join their moves.
+    off = 0
+    strands.forEach((s, i) => {
+      const u = nudges[i]
+      if (u) for (let k = 0; k < u.length; k += 2) { DX[off + k / 2] += u[k]; DY[off + k / 2] += u[k + 1] }
+      off += s.points.length / 2
+    })
+
     // Move every node at once, then bring any that left the shape back to its nearest edge.
     const b = this.boundary
+    for (let k = 0; k < n; k++) {
+      let x = X[k] + DX[k], y = Y[k] + DY[k]
+      if (!b.empty && !b.contains(x, y)) [x, y] = b.closest(x, y)
+      DX[k] = x; DY[k] = y // from here on, the new positions
+    }
+    this.held = untangle(strands, X, Y, DX, DY, n)
     g = 0
     for (const s of strands) {
       const pts = s.points
-      for (let i = 0; i < pts.length; i += 2) {
-        let x = X[g] + DX[g], y = Y[g] + DY[g]
-        if (!b.empty && !b.contains(x, y)) [x, y] = b.closest(x, y)
-        pts[i] = x; pts[i + 1] = y
-        g++
-      }
+      for (let i = 0; i < pts.length; i += 2) { pts[i] = DX[g]; pts[i + 1] = DY[g]; g++ }
     }
     this.step++
     return true
   }
+
+  // Nodes held back on the last step so lines wouldn't cross.
+  held = 0
 }
+
+// Keeps lines from crossing. Repulsion keeps lines apart, but a fast fold or a dense, stiff packing can carry
+// one edge across another between steps, which the Illustrator panel allowed. Any node whose move would make
+// two edges cross stays where it was, and the check repeats until no new crossing is left. Moves that cross
+// nothing are untouched, so ordinary growth is exactly the panel's. Returns how many nodes were held back.
+function untangle(strands: Strand[], X: Float64Array, Y: Float64Array, NX: Float64Array, NY: Float64Array, n: number): number {
+  // next[k]: the node after k along its line, or -1 at an open end.
+  const next = new Int32Array(n)
+  let off = 0
+  for (const s of strands) {
+    const m = s.points.length / 2
+    for (let i = 0; i < m; i++) next[off + i] = i < m - 1 ? off + i + 1 : s.closed && m > 2 ? off : -1
+    off += m
+  }
+  const edges: number[] = []
+  for (let k = 0; k < n; k++) if (next[k] >= 0) edges.push(k)
+  const e = edges.length
+  const MX = new Float64Array(e), MY = new Float64Array(e)
+  const stamp = new Int32Array(n)
+  const orient = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number) => (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+  let held = 0
+  for (let pass = 1; pass <= 64; pass++) {
+    let longest = 0
+    for (let i = 0; i < e; i++) {
+      const a = edges[i], c = next[a]
+      MX[i] = (NX[a] + NX[c]) / 2; MY[i] = (NY[a] + NY[c]) / 2
+      const dx = NX[c] - NX[a], dy = NY[c] - NY[a]
+      longest = Math.max(longest, dx * dx + dy * dy)
+    }
+    // Two edges that cross have middles at most one edge length apart, so neighbouring cells hold every pair.
+    const grid = buildGrid(MX, MY, e, Math.sqrt(longest), 64)
+    const back: number[] = []
+    for (let i = 0; i < e; i++) {
+      const a0 = edges[i], a1 = next[a0]
+      const ax0 = NX[a0], ay0 = NY[a0], ax1 = NX[a1], ay1 = NY[a1]
+      const cx = Math.floor((MX[i] - grid.x0) * grid.inv), cy = Math.floor((MY[i] - grid.y0) * grid.inv)
+      for (let yy = Math.max(0, cy - 1); yy <= Math.min(grid.rows - 1, cy + 1); yy++) {
+        for (let xx = Math.max(0, cx - 1); xx <= Math.min(grid.cols - 1, cx + 1); xx++) {
+          const cell = yy * grid.cols + xx
+          for (let k = grid.start[cell]; k < grid.start[cell + 1]; k++) {
+            const j = grid.items[k]
+            if (j <= i) continue
+            const b0 = edges[j], b1 = next[b0]
+            if (b0 === a1 || b1 === a0 || b0 === a0 || b1 === a1) continue
+            const bx0 = NX[b0], by0 = NY[b0], bx1 = NX[b1], by1 = NY[b1]
+            const d1 = orient(ax0, ay0, ax1, ay1, bx0, by0), d2 = orient(ax0, ay0, ax1, ay1, bx1, by1)
+            if (!(d1 * d2 < 0)) continue
+            const d3 = orient(bx0, by0, bx1, by1, ax0, ay0), d4 = orient(bx0, by0, bx1, by1, ax1, ay1)
+            if (!(d3 * d4 < 0)) continue
+            // A crossing. Hold back whichever of its four nodes moved; one that was already there is left alone.
+            for (const node of [a0, a1, b0, b1]) {
+              if (stamp[node] === pass || (NX[node] === X[node] && NY[node] === Y[node])) continue
+              stamp[node] = pass
+              back.push(node)
+            }
+          }
+        }
+      }
+    }
+    if (!back.length) break
+    for (const node of back) { NX[node] = X[node]; NY[node] = Y[node] }
+    held += back.length
+  }
+  return held
+}
+

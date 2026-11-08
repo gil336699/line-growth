@@ -109,6 +109,21 @@ const circle = (cx: number, cy: number, r: number, n = 24): Vec[] =>
   Array.from({ length: n }, (_, i): Vec => [cx + r * Math.cos((i / n) * Math.PI * 2), cy + r * Math.sin((i / n) * Math.PI * 2)])
 const toStrand = (points: Vec[], closed: boolean): Strand => ({ closed, points: flat(points) })
 
+// Places where lines cross each other or themselves (edges sharing a node don't count). Brute force with a box test.
+function crossings(strands: Strand[]): number {
+  const e: number[][] = []
+  strands.forEach((s, k) => { const n = s.points.length / 2; for (let i = 0; i < (s.closed ? n : n - 1); i++) { const j = (i + 1) % n; e.push([s.points[i * 2], s.points[i * 2 + 1], s.points[j * 2], s.points[j * 2 + 1], k, i, j]) } })
+  const o = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number) => (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+  let count = 0
+  for (let a = 0; a < e.length; a++) for (let b = a + 1; b < e.length; b++) {
+    const p = e[a], q = e[b]
+    if (p[4] === q[4] && (p[5] === q[5] || p[5] === q[6] || p[6] === q[5] || p[6] === q[6])) continue
+    if (Math.max(p[0], p[2]) < Math.min(q[0], q[2]) || Math.max(q[0], q[2]) < Math.min(p[0], p[2]) || Math.max(p[1], p[3]) < Math.min(q[1], q[3]) || Math.max(q[1], q[3]) < Math.min(p[1], p[3])) continue
+    if (o(p[0], p[1], p[2], p[3], q[0], q[1]) * o(p[0], p[1], p[2], p[3], q[2], q[3]) < 0 && o(q[0], q[1], q[2], q[3], p[0], p[1]) * o(q[0], q[1], q[2], q[3], p[2], p[3]) < 0) count++
+  }
+  return count
+}
+
 describe('resample', () => {
   it('spaces points evenly and keeps an open path\'s end', () => {
     const open = resample([[0, 0], [10, 0], [10, 10]], false, 3)
@@ -167,6 +182,19 @@ describe('growth step', () => {
       const x = s.points[i], y = s.points[i + 1]
       expect(x).toBeGreaterThanOrEqual(-1e-9); expect(x).toBeLessThanOrEqual(300 + 1e-9)
       expect(Math.hypot(x - 150, y - 150)).toBeGreaterThan(40 - 0.02)
+    }
+  })
+
+  it('never lets lines cross, where the panel\u2019s rules alone would', () => {
+    // A start circle many segment lengths across buckles all at once; without the check, lines crossed by step 100.
+    const disc = ellipseRing(100, 100, 95, 95, 0.01)
+    for (const randomness of [0.25, 0]) {
+      const g = new Grower([toStrand(resample(circle(100, 100, 14.25, 200), true, 1.08), true)], 0,
+        params({ maxNodes: 4000, segmentLength: 0.8, repelRadius: 2.08, stepSize: 0.072, repulsion: 0.95, attraction: 0.47, alignment: 0.48, randomness }), new Boundary([disc]))
+      let held = 0
+      for (let i = 0; i < 110; i++) { g.stepOnce(); held += g.held }
+      expect(crossings(g.strands)).toBe(0)
+      expect(held).toBeGreaterThan(0)
     }
   })
 

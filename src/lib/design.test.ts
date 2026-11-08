@@ -82,8 +82,12 @@ describe('changes', () => {
     const tuned = planChange(freshDesign(DEFAULTS), { width: 400, height: 400 }).design.settings
     // The panel's rule: a 72nd of the larger side, here the 390 mm boundary inside a 5 mm margin.
     expect(tuned.segmentLength).toBeCloseTo(390 / 72, 3)
-    const manual = planChange(freshDesign({ ...DEFAULTS, autoTune: false, segmentLength: 3 }), { width: 400, height: 400 }).design.settings
-    expect(manual.segmentLength).toBe(3)
+    const manual = planChange(freshDesign({ ...DEFAULTS, autoTune: false, segmentLength: 3 }), { width: 400, height: 400 })
+    expect(manual.design.settings.segmentLength).toBe(3)
+    // Turning it back on tunes straight away and keeps the lines.
+    const on = planChange(manual.design, { autoTune: true })
+    expect(on.design.settings.segmentLength).toBeCloseTo(390 / 72, 3)
+    expect(on.design.state).toBe(manual.design.state)
   })
 
   it('adds drawn lines to the start and the growth, and erases them from both', () => {

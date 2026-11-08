@@ -132,6 +132,8 @@ export function planChange(d: Design, patch: Partial<Settings>, imported: Import
   const startChanged = START.some(k => next[k] !== s[k]) || (next.start === 'circles' && next.seed !== s.seed)
   const sheetChanged = SHEET.some(k => next[k] !== s[k])
   const base = { settings: next, imported, custom: d.custom }
+  // Turning Auto tune on tunes now, as the panel did, but keeps the lines grown so far.
+  if (next.autoTune && !s.autoTune && !shapeChanged && !startChanged) return { design: { ...d, settings: tuned(base) }, discards: false }
   if (shapeChanged || startChanged) {
     const settings = tuned(base)
     return { design: { ...base, settings, state: resetState({ ...base, settings }) }, discards: grown }
