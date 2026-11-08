@@ -1,5 +1,12 @@
 # Line Growth Changelog
 
+## 1.0.1 2026-11-08
+
+- **Drawn lines never cross other lines.** A line you draw stops where it meets another line, or itself, and the status says why. A clicked circle shrinks to fit between the lines round it, and a click on a line says there's no room. Before, a line drawn across grown lines crossed them.
+- **Lines that cross no longer freeze.** The crossing check held back every node of two edges that already crossed, as lines drawn over each other or crossing in an imported drawing do, so those lines stopped moving there for good and the status wrongly said lines were packed too tightly. Now only moves that would make a new crossing are held back. Ordinary growth is unchanged, and so is its speed.
+- **The "packed too tightly" warning** names the repel radius only when it's more than 4 segment lengths, and suggests Auto tune only when it's off. Before, it could say a repel radius of 2.6 segment lengths should be kept under 5.
+- **A demo** at the top of the README, also as an MP4 video with the release.
+
 ## 1.0.0 2026-11-08
 
 First release of Line Growth, rebuilt from Gil's Differential Growth panel for Illustrator as a browser app. The panel's growth rules, Auto tune, multiple growth paths, settling at the node limit, the boundary guide and its controls are all here, and:

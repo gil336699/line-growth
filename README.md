@@ -4,6 +4,10 @@ Line Growth is a browser app for differential line growth: a line that keeps len
 
 **Use it online:** https://gil336699.github.io/line-growth/
 
+![Line Growth in use: a circle grows and folds to fill a 200 mm disc while a wavy line and a small circle are drawn beside it and grow too, an Illustrator SVG with a hole is dropped in and its two start lines fill the shape around the hole, and the result is exported as a real-size SVG.](docs/demo.gif)
+
+[Watch the demo as a video](https://github.com/gil336699/line-growth/releases/download/v1.0.1/line-growth-demo.mp4) (MP4, 1920 × 1200, 22 seconds).
+
 Everything runs in your browser. Files you open and the lines you grow stay on your computer.
 
 ## Run
@@ -177,6 +181,7 @@ src/
   growth/              the engine: growth step, boundary, start shapes, auto tune, geometry
   lib/                 settings, units, design rules, drawing by hand, project files, SVG import, SVG, DXF and PNG export
   worker/              the growth worker and its messages
+docs/                  the demo GIF
 test-fixtures/         small SVGs the tests use, including Gil's pill outlines
 local/                 QA and timing scripts, not committed
 ```
