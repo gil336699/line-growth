@@ -11,7 +11,7 @@ import { unpack, type FromRunner } from './worker/runner'
 
 export type Status = { text: string; warning?: boolean } | null
 // held: about how many nodes are held back from crossing per step, averaged over recent frames.
-export type Stats = { revision: number; step: number; nodes: number; lines: number; length: number; settling: boolean; rate: number; held: number }
+export type Stats = { revision: number; step: number; nodes: number; lines: number; length: number; settling: boolean; filled: boolean; rate: number; held: number }
 
 // Settings the worker needs while it grows; anything else only changes how lines are drawn.
 const GROWTH_KEYS: (keyof Settings)[] = ['maxNodes', 'segmentLength', 'repelRadius', 'repulsion', 'alignment', 'attraction', 'stepSize', 'randomness', 'seed']
@@ -21,8 +21,8 @@ export function useGrowth(initial: () => { design: Design; saved: boolean }, set
   const [design, setDesign] = useState<Design>(first.design)
   const committed = useRef<Design>(first.design)
   const live = useRef<GrowthState>(first.design.state)
-  const statsOf = (state: GrowthState, revision: number, settling = false, rate = 0, held = 0): Stats =>
-    ({ revision, step: state.step, nodes: nodeCount(state), lines: state.strands.length, length: lineLength(state.strands), settling, rate, held })
+  const statsOf = (state: GrowthState, revision: number, settling = false, rate = 0, held = 0, filled = false): Stats =>
+    ({ revision, step: state.step, nodes: nodeCount(state), lines: state.strands.length, length: lineLength(state.strands), settling, filled, rate, held })
   const [stats, setStats] = useState<Stats>(() => statsOf(first.design.state, 0))
   const revision = useRef(0)
   const [running, setRunning] = useState(false)
@@ -40,10 +40,10 @@ export function useGrowth(initial: () => { design: Design; saved: boolean }, set
 
   const current = useCallback((): Design => ({ ...committed.current, state: live.current }), [])
   const heldAverage = useRef(0)
-  const show = useCallback((state: GrowthState, settling = false, rate = 0, held = 0) => {
+  const show = useCallback((state: GrowthState, settling = false, rate = 0, held = 0, filled = false) => {
     live.current = state
     heldAverage.current = held ? heldAverage.current * 0.7 + held * 0.3 : 0
-    setStats(statsOf(state, ++revision.current, settling, rate, heldAverage.current))
+    setStats(statsOf(state, ++revision.current, settling, rate, heldAverage.current, filled))
   }, [])
   const commit = useCallback((d: Design) => {
     committed.current = d
@@ -72,7 +72,7 @@ export function useGrowth(initial: () => { design: Design; saved: boolean }, set
       const { frame } = message
       const state: GrowthState = { strands: unpack(frame), step: frame.step }
       if (message.kind === 'frame') {
-        show(state, frame.settling, frame.stepsPerSecond, frame.held)
+        show(state, frame.settling, frame.stepsPerSecond, frame.held, frame.filled)
         // Ready for the next frame once this one is drawn, or after a moment when the browser draws no frames
         // (a hidden tab), so the counts still update.
         let acked = false

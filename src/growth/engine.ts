@@ -142,6 +142,8 @@ export function subdivide(strands: Strand[], params: GrowthParams, step: number)
 
 export const nodeCount = (strands: Strand[]) => strands.reduce((sum, s) => sum + s.points.length / 2, 0)
 
+const FILLED_AFTER_STEPS = 300
+
 export class Grower {
   strands: Strand[]
   step: number
@@ -152,18 +154,24 @@ export class Grower {
   private repelKey = ''
   private X = new Float64Array(0); private Y = new Float64Array(0)
   private DX = new Float64Array(0); private DY = new Float64Array(0)
+  // The last step that added nodes, or that changed what the lines can do.
+  private lastAdded: number
 
   constructor(strands: Strand[], step: number, params: GrowthParams, boundary: Boundary) {
     this.strands = strands
     this.step = step
     this.params = params
     this.boundary = boundary
+    this.lastAdded = step
   }
 
-  setParams(params: GrowthParams) { this.params = params }
-  setBoundary(boundary: Boundary) { this.boundary = boundary; this.repelKey = '' }
+  setParams(params: GrowthParams) { this.params = params; this.lastAdded = this.step }
+  setBoundary(boundary: Boundary) { this.boundary = boundary; this.repelKey = ''; this.lastAdded = this.step }
   get nodes() { return nodeCount(this.strands) }
   get settling() { return this.nodes >= Math.floor(this.params.maxNodes) }
+  // Below the node limit, lines that have added no nodes for a while have filled the boundary at this segment
+  // length. They keep settling, but they won't grow longer unless the segment length gets smaller.
+  get filled() { return !this.settling && this.step - this.lastAdded >= FILLED_AFTER_STEPS }
 
   // The fixed boundary points, spaced one segment length apart, rebuilt when the spacing or reach changes.
   boundaryPoints(): Repellers {
@@ -187,6 +195,7 @@ export class Grower {
     const nudges = subdivide(this.strands, p, this.step)
     const strands = this.strands
     const n = nodeCount(strands)
+    if (n > total) this.lastAdded = this.step
     if (this.X.length < n) {
       const size = Math.max(n, Math.ceil(this.X.length * 1.5))
       this.X = new Float64Array(size); this.Y = new Float64Array(size)

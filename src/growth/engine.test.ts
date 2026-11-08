@@ -214,6 +214,21 @@ describe('growth step', () => {
     for (const [s, x, y] of [[0, 150, 150], [0, 155, 150], [1, 152, 147.5], [1, 152, 152.5]]) expect(moved(s, nodeAt(s, x, y))).toBeGreaterThan(0)
   })
 
+  it('says when lines have filled the boundary below the node limit, until a smaller segment length makes room', () => {
+    const small: Polygon = [[0, 0], [60, 0], [60, 60], [0, 60]]
+    const g = new Grower([toStrand(resample(circle(30, 30, 6, 24), true, 9), true)], 0, params({ maxNodes: 5000 }), new Boundary([small]))
+    let steps = 0
+    while (!g.filled && steps < 3000) { g.stepOnce(); steps++ }
+    expect(g.filled).toBe(true)
+    expect(g.settling).toBe(false)
+    const full = g.nodes
+    expect(full).toBeLessThan(5000)
+    g.setParams(params({ maxNodes: 5000, segmentLength: 3.5, repelRadius: 9, stepSize: 0.33 }))
+    expect(g.filled).toBe(false)
+    for (let i = 0; i < 400; i++) g.stepOnce()
+    expect(g.nodes).toBeGreaterThan(full * 1.5)
+  })
+
   it('keeps settling at the node limit, and is the same run after run', () => {
     const run = (seed: number, steps: number) => {
       const g = new Grower([toStrand(resample(circle(150, 150, 20, 40), true, 9), true)], 0, params({ maxNodes: 120, randomness: 0.3, seed }), new Boundary([square]))

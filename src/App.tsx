@@ -100,6 +100,20 @@ export function App() {
     return () => window.clearTimeout(timer)
   }, [design, running, unsavedNow, current])
 
+  // While lines grow, keep a copy every few seconds and whenever the page is hidden or closed, so a reload or a
+  // closed tab mid-run loses a few seconds of growth at most. A copy made mid-run counts as unsaved.
+  useEffect(() => {
+    const keep = () => {
+      storage.set(SESSION_KEY, serializeProject(current()))
+      storage.set(SESSION_UNSAVED_KEY, unsavedNow || running ? '1' : '0')
+    }
+    const hidden = () => { if (document.visibilityState === 'hidden') keep() }
+    window.addEventListener('pagehide', keep)
+    document.addEventListener('visibilitychange', hidden)
+    const timer = running ? window.setInterval(keep, 5000) : undefined
+    return () => { window.removeEventListener('pagehide', keep); document.removeEventListener('visibilitychange', hidden); window.clearInterval(timer) }
+  }, [running, unsavedNow, current])
+
   // Asks before discarding unsaved work, in an in-app dialog (embedded browsers can block confirm()).
   const guard = useCallback((when: boolean, p: Pending) => { if (when) setPending(p); else p.run() }, [])
   const { change: changeDesign, discards, unsaved } = growth
@@ -284,13 +298,15 @@ export function App() {
   // Many nodes held back from crossing on every step means the forces are out of balance, usually a repel
   // radius far larger than the segment length.
   const ratio = s.repelRadius / s.segmentLength
-  // The advice names the repel radius only when it is the likely cause, and Auto tune only when it's off.
+  // The advice names the repel radius only when it is the likely cause. Otherwise the lines are packed closer
+  // than the forces suit, as in a detailed imported drawing: in Gil's Voronoi export, lowering Repulsion made it
+  // worse, and a finer scale with more nodes fixed it.
   const strained = growth.running && stats.held > Math.max(40, stats.nodes * 0.02)
     && (ratio > 4
       ? `Lines are packed too tightly to move freely. The repel radius is ${ratio.toFixed(1)} segment lengths; keep it under about 5${s.autoTune ? '' : ', or turn on Auto tune'}.`
-      : `Lines are packed too tightly to move freely. ${s.autoTune ? 'Try a lower Repulsion.' : 'Turn on Auto tune to balance the forces.'}`)
+      : 'Lines are packed too tightly to move freely. Make the segment length, repel radius and step size smaller together, and raise Max nodes.')
   const statusText = status?.text ?? (strained || (growth.stopping ? 'Stopping after the current step…'
-    : growth.running ? `${stats.settling ? 'Settling at max nodes' : 'Growing'} · ${counts}` : counts))
+    : growth.running ? `${stats.settling ? 'Settling at max nodes' : stats.filled ? 'Filled at this segment length, settling' : 'Growing'} · ${counts}` : counts))
 
   return <main className="studio">
     <TooltipLayer />

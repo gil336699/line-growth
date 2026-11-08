@@ -266,10 +266,11 @@ details[open] > summary::after { transform: rotate(45deg); }
 /* Measurements: a grouped list. */
 .measurements { padding: 16px; }
 .measurements dl { margin: 8px 0 0; padding: 0; overflow: hidden; border-radius: var(--r-group); background: var(--group); font-size: 12.5px; }
-.measurements dl div { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 12px; }
+/* A value that doesn't fit beside its label moves to its own line, right-aligned, rather than breaking up. */
+.measurements dl div { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: 8px; padding: 4px 12px; }
 .measurements dl div + div { border-top: 1px solid var(--separator); }
-.measurements dt { padding: 5px 0; color: var(--label-2); cursor: help; text-decoration: underline dotted var(--label-3); text-underline-offset: 3px; }
-.measurements dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.measurements dt { padding: 5px 0; white-space: nowrap; color: var(--label-2); cursor: help; text-decoration: underline dotted var(--label-3); text-underline-offset: 3px; }
+.measurements dd { margin: 0 0 0 auto; padding-bottom: 1px; white-space: nowrap; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
 
 /* Floating bars over the sheet. */
 .viewport-bars { display: grid; justify-items: start; gap: 8px; pointer-events: none; }

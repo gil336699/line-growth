@@ -42,5 +42,7 @@ describe('SVG import', () => {
   it('explains files it can’t use', () => {
     expect(() => readSvgDrawing('hello')).toThrow(SvgShapeError)
     expect(() => readSvgDrawing('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><text>hi</text></svg>')).toThrow('no paths or shapes')
+    // Cut short by a failed download: its paths are broken, so it says so instead of using what's there.
+    expect(() => readSvgDrawing('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0 L10 0 L10 10Z"/><path d="M0 0 L10')).toThrow('cut short')
   })
 })

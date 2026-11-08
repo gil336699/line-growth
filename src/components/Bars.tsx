@@ -78,7 +78,7 @@ export const Inspector = memo(function Inspector({ s, stats, boundaryLength, bou
   const L = (mm: number) => formatLength(mm, s.units, s.dpi, true)
   const rows: [string, string, string][] = [
     ['Sheet', `${formatLength(s.width, s.units, s.dpi)} × ${formatLength(s.height, s.units, s.dpi)}`, 'Width × height of the sheet, which is also the size of every export.'],
-    ['Nodes', `${stats.nodes.toLocaleString()} of ${s.maxNodes.toLocaleString()}`, 'Points the lines are made of. New ones are added until the limit, then the lines keep settling.'],
+    ['Nodes', `${stats.nodes.toLocaleString()} of ${s.maxNodes.toLocaleString()}`, 'Points the lines are made of. New ones are added until the limit, or until the lines fill the boundary at the segment length; then the lines keep settling.'],
     ['Lines', stats.lines.toLocaleString(), 'Separate lines growing. They push each other away but never join.'],
     ['Steps', stats.step.toLocaleString(), 'Growth steps since the start lines.'],
     ['Line length', formatLong(length, s.units), 'Total length of every line, to estimate plotter or laser time.'],

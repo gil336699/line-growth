@@ -321,6 +321,8 @@ export function readSvgDrawing(text: string, tolerance = 0.02): SvgDrawing {
     if (!selfClosing) stack.push({ name, m, skip })
   }
   if (!rootScale) throw new SvgShapeError('This file is not an SVG drawing.')
+  // A file cut short, by a failed download or copy, has no closing tag. Its paths may be missing or broken.
+  if (!/<\/(svg:)?svg\s*>/i.test(body)) throw new SvgShapeError('This SVG is cut short or damaged: it stops before its end. Export or download it again.')
   if (!paths.length) throw new SvgShapeError('This SVG has no paths or shapes to use.')
   // Without a usable page size, the drawing's own extent is the page.
   if (!(pageW > 0 && pageH > 0)) {

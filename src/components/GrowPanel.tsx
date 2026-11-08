@@ -24,7 +24,7 @@ export const GrowPanel = memo(function GrowPanel({ s, change, onShuffle }: { s: 
         tip="Choose growth settings to suit the boundary and start shape, now and whenever either changes, as the Illustrator panel did on Capture. Turn off to keep your own."
         onChange={autoTune => change({ autoTune }, 'autoTune')} />
       <RangeField label="Max nodes" value={s.maxNodes} min={LIMITS.maxNodes[0]} max={LIMITS.maxNodes[1]} step={1} digits={0} log
-        tip="Most points the lines can have. More nodes grow longer, more detailed lines and take longer. At the limit the lines keep settling."
+        tip="Most points the lines can have. At the limit the lines keep settling. Lines also stop adding nodes when they fill the boundary; a smaller segment length makes room for more."
         onChange={maxNodes => change({ maxNodes: Math.round(maxNodes) }, 'maxNodes')} />
       <RangeField label="Speed" value={s.stepsPerFrame} min={LIMITS.stepsPerFrame[0]} max={LIMITS.stepsPerFrame[1]} step={1} digits={0} suffix="/ frame"
         tip="Growth steps per screen update. Higher grows faster but looks less smooth."

@@ -6,7 +6,8 @@ import { Grower, type GrowthParams, type Strand } from '../growth/engine'
 import type { Polygon } from '../growth/geometry'
 
 export type Packed = { points: Float64Array; lengths: Int32Array; closed: Uint8Array }
-export type Frame = Packed & { step: number; nodes: number; settling: boolean; stepsPerSecond: number; held: number } // held: nodes held back from crossing on the last step
+// held: nodes held back from crossing on the last step; filled: no room for more nodes at this segment length.
+export type Frame = Packed & { step: number; nodes: number; settling: boolean; filled: boolean; stepsPerSecond: number; held: number }
 
 export type ToRunner =
   | { kind: 'load'; lines: Packed; step: number; params: GrowthParams; rings: Polygon[] }
@@ -63,7 +64,7 @@ export function createRunner(post: (message: FromRunner, transfer: Transferable[
     const packed = pack(g.strands)
     dirty = false
     inFlight = true
-    return [{ ...packed, step: g.step, nodes: g.nodes, settling: g.settling, stepsPerSecond: run ? rate : 0, held: g.held }, [packed.points.buffer, packed.lengths.buffer, packed.closed.buffer]]
+    return [{ ...packed, step: g.step, nodes: g.nodes, settling: g.settling, filled: g.filled, stepsPerSecond: run ? rate : 0, held: g.held }, [packed.points.buffer, packed.lengths.buffer, packed.closed.buffer]]
   }
   function flush() {
     if (!grower || !dirty || inFlight) return

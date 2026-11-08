@@ -2,6 +2,7 @@
 // and the grown lines. Also the rules for what each change does to the growth, so the page and the tests
 // agree. Plain TypeScript, no React.
 import { autoTune } from '../growth/autotune'
+import { separateStarts } from '../growth/separate'
 import { boundaryOf, type Boundary } from '../growth/boundary'
 import type { GrowthParams, Strand } from '../growth/engine'
 import { boxOf, ellipseRing, flat, pathLength, resample, unflat, type Box, type Polygon, type Vec } from '../growth/geometry'
@@ -61,10 +62,12 @@ export function strandOf(path: Path, spacing: number, b: Boundary): Strand {
   return { closed: path.closed, points: flat(inside) }
 }
 
+// Start lines that touch, such as the cells of a Voronoi drawing, begin half a segment length apart, so they
+// can move (see growth/separate.ts).
 export function resetState(d: Pick<Design, 'settings' | 'imported' | 'custom'>): GrowthState {
   const b = boundaryOfDesign(d)
   const spacing = initialSpacing(d.settings, b)
-  return { strands: startOf(d).map(path => strandOf(path, spacing, b)), step: 0 }
+  return { strands: separateStarts(startOf(d).map(path => strandOf(path, spacing, b)), d.settings.segmentLength * 0.5), step: 0 }
 }
 
 export function growthParams(s: Settings): GrowthParams {
