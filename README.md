@@ -4,9 +4,9 @@ Line Growth is a browser app for differential line growth: a line that keeps len
 
 **Use it online:** https://gil336699.github.io/line-growth/
 
-![Line Growth in use: a circle grows and folds to fill a 200 mm disc while a wavy line and a small circle are drawn beside it and grow too, an Illustrator SVG with a hole is dropped in and its two start lines fill the shape around the hole, and the result is exported as a real-size SVG.](docs/demo.gif)
+![Line Growth in use: a circle grows and folds to fill a 200 mm disc while a wavy line and a small circle are drawn beside it and grow too, never crossing, an Illustrator SVG with a hole is dropped in and its two start lines fill the shape around the hole, and the result is exported as a real-size SVG.](docs/demo.gif)
 
-[Watch the demo as a video](https://github.com/gil336699/line-growth/releases/download/v1.0.1/line-growth-demo.mp4) (MP4, 1920 × 1200, 22 seconds).
+[Watch the demo as a video](https://github.com/gil336699/line-growth/releases/download/v1.0.2/line-growth-demo.mp4) (MP4, 1920 × 1200, 25 seconds).
 
 Everything runs in your browser. Files you open and the lines you grow stay on your computer.
 
@@ -86,7 +86,7 @@ Every export holds what the view shows: the lines, plus the boundary and the nod
 | Control | Effect |
 | --- | --- |
 | Auto tune | Chooses the growth settings and line width from the boundary and start lines, now and whenever either changes, using the Illustrator panel's Capture rules. Off keeps your own. |
-| Max nodes | Most points the lines can have (40–100,000). At the limit, lines keep settling. |
+| Max nodes | Most points the lines can have (40–100,000). At the limit, lines keep settling. Lines also stop adding nodes once they fill the boundary at the segment length, and the status says "Filled at this segment length"; a smaller segment length makes room for more. |
 | Speed | Growth steps per screen update (1–30). |
 | Segment length | Ideal distance between neighbouring nodes, and the spacing of the fixed boundary points. |
 | Repel radius | How far nodes push each other, and the boundary pushes nodes, away. |
@@ -140,7 +140,7 @@ What's new in the engine:
 - **Randomness** nudges each new node sideways by up to randomness × a quarter of its edge, using a hash of the seed, step and node, so even shapes break into organic folds and every run is repeatable. The nudge is part of the node's first move, so it is checked for crossings too.
 - **Determinism.** The same lines, settings and step count always give the same result, bit for bit. A test checks that a run saved half way, reopened and continued ends exactly where an uninterrupted run does, and another checks the engine against a copy of the panel's step.
 
-**Limits of the method.** Some settings are unstable: a repel radius of more than about five segment lengths (for example after halving only the segment length) packs so many nodes within reach that their pushes overwhelm the step, and lines judder in place, held back from crossing. The status warns when that happens. Scale the segment length, repel radius and step size together, or turn on Auto tune. Lines that cross in an imported drawing keep growing, but the check can't uncross them, so they may stay crossed. Nodes are only added, never removed, so a line can't shorten. The boundary and imported curves are short straight segments, within 0.02 mm of the drawn curve. Lengths in Auto tune follow the panel's rules, which were made for a node cap of 2,600, so large boundaries may need a higher Max nodes to fill.
+**Limits of the method.** Some settings are unstable: a repel radius of more than about five segment lengths (for example after halving only the segment length) packs so many nodes within reach that their pushes overwhelm the step, and lines judder in place, held back from crossing. The status warns when that happens. Scale the segment length, repel radius and step size together, or turn on Auto tune. Lines that cross in an imported drawing keep growing, but the check can't uncross them, so they may stay crossed. Lines that touch at the start, such as Voronoi edges meeting at a corner, would be held still where they touch, so before growth begins a closed line that touches another is set in by a quarter of the segment length, and an open line's touching end is drawn back by as much. A drawing with many short lines, such as a Voronoi export, can still be packed closer than Auto tune's lengths suit; the status says so, and a smaller segment length, repel radius and step size with a higher Max nodes frees the lines. Nodes are only added, never removed, so a line can't shorten. The boundary and imported curves are short straight segments, within 0.02 mm of the drawn curve. Lengths in Auto tune follow the panel's rules, which were made for a node cap of 2,600, so large boundaries may need a higher Max nodes to fill.
 
 ## Known limits
 
@@ -159,7 +159,7 @@ The crossing check costs about 10 % in ordinary growth. When settings are out of
 
 - Up to 100,000 nodes can be set. Beyond about 50,000, growth is slow and files are large.
 - PNG export is limited to 16,384 px a side and 120 megapixels, which browsers can draw. Use SVG for larger work.
-- The live design is kept in the browser's local storage, which holds about 5 MB. Designs above roughly 100,000 nodes may not fit, so save a project file to keep work.
+- The live design is kept in the browser's local storage, every 5 seconds while lines grow and whenever the page is hidden or closed. Local storage holds about 5 MB. Designs above roughly 100,000 nodes may not fit, so save a project file to keep work.
 - Browsers slow a hidden tab's timers, even a worker's, to a few a second. Growth catches up by running longer batches, so it keeps going at about 90 steps per second at the default size in a background tab, but Pause can then take up to a quarter of a second.
 - Frame rate in the browser wasn't measured, as the preview pane wasn't on screen during the long runs.
 

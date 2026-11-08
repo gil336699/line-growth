@@ -1,5 +1,17 @@
 # Line Growth Changelog
 
+## 1.0.2 2026-11-08
+
+Fixes from three rounds of QA (functionality, UI/UX, and real use with Gil's files).
+
+- **Lines that start out touching can grow.** In an imported drawing whose lines meet, such as the edges of a Voronoi pattern meeting at its corners, the crossing check held every touching node still, so the lines froze there. Before growth starts, a closed line that touches another is now set in by a quarter of the segment length, and an open line's touching end is drawn back by as much. In Gil's Voronoi Studio export, nodes held back per step fell from 611 to 168. In a honeycomb of separate edges, they fell from all of them to none.
+- **The status says when lines have filled the shape.** Below Max nodes, lines stop adding nodes once they fill the boundary at the segment length. The status kept saying "Growing" while nothing grew. It now says "Filled at this segment length, settling", and the Max nodes and Nodes descriptions say a smaller segment length makes room for more.
+- **Growth survives a reload.** The design was kept only while paused, so reloading or closing the tab mid-run lost the run (479 steps back to 0 in a test). It's now kept every 5 seconds while lines grow, and whenever the page is hidden or closed.
+- **Better advice when lines are packed too tightly.** For a detailed drawing the status suggested a lower Repulsion, which made it worse with Gil's Voronoi export: 281 nodes held per step against 198. It now suggests a smaller segment length, repel radius and step size with a higher Max nodes, which brought it to 14.
+- **A cut-off SVG** says it's cut short or damaged, rather than that it has no paths.
+- **Measurements fit narrow windows.** A value that doesn't fit beside its label moves to its own line instead of breaking up.
+- **A clearer README demo.** Its captions are larger and stay up long enough to read, and the mint boundary keeps its colour in the GIF.
+
 ## 1.0.1 2026-11-08
 
 - **Drawn lines never cross other lines.** A line you draw stops where it meets another line, or itself, and the status says why. A clicked circle shrinks to fit between the lines round it, and a click on a line says there's no room. Before, a line drawn across grown lines crossed them.
