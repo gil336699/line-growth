@@ -182,14 +182,15 @@ export function App() {
       setTab('shape')
       const lines = capture.grow.length
       const parts = [
-        imported ? `Using ${file.name}: its largest closed path is the boundary` : `${file.name} has no closed path, so the lines grow inside the page`,
+        imported && drawing.fromClip ? `${file.name} is a picture, so the outline of its clipping mask is the boundary`
+          : imported ? `Using ${file.name}: its largest closed path is the boundary` : `${file.name} has no closed path, so the lines grow inside the page`,
         lines ? `${lines} ${lines === 1 ? 'line' : 'lines'} to grow` : 'and a start shape grows, as it has no other paths',
       ]
       const notes = [
         capture.outside ? `${capture.outside} ${capture.outside === 1 ? 'line outside the boundary was' : 'lines outside the boundary were'} left out.` : '',
         k !== 1 ? `The drawing was scaled to ${Math.round(k * 100)} % to fit the sheet limits.` : '',
       ].filter(Boolean).join(' ')
-      setStatus({ text: `${parts[0]}, ${parts[1]}.${notes ? ` ${notes}` : ''}`, warning: Boolean(notes) })
+      setStatus({ text: `${parts[0]}, ${parts[1]}.${notes ? ` ${notes}` : ''}`, warning: Boolean(notes) || drawing.fromClip })
     } catch (error) {
       setStatus({ text: error instanceof SvgShapeError ? error.message : `${file.name} could not be read as an SVG.`, warning: true })
     }

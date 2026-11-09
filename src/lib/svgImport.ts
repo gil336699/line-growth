@@ -10,14 +10,25 @@ export type SvgDrawing = {
   width: number; height: number // the page, in mm
   paths: SvgPath[] // in file order
   units: SizedBy // 'file': the file gives its size; 'css': assumed 96 per inch; 'illustrator': assumed 72 per inch
+  // True when the file draws no shapes, only pictures, and its paths are the outlines of the clipping masks
+  // that trim them. Illustrator saves a shape it can't write as SVG this way: a picture of it, clipped to its outline.
+  fromClip: boolean
 }
 export class SvgShapeError extends Error {}
+
+// Illustrator saves a shape as a picture when SVG can't describe its look: a freeform gradient, a mesh or an effect.
+export const PICTURE_ONLY = 'This SVG is only a picture, with no lines. In Illustrator, select the shape, click Clear Appearance '
+  + 'in the Appearance panel, add a stroke and export again.'
 
 const MM: Record<string, number> = { mm: 1, cm: 10, q: 0.25, in: 25.4, pt: 25.4 / 72, pc: 25.4 / 6, px: 25.4 / 96, '': 25.4 / 96 }
 // Elements whose contents are never drawn directly, or aren't outlines.
 const SKIP = new Set(['defs', 'symbol', 'clippath', 'mask', 'pattern', 'marker', 'style', 'script', 'title', 'desc', 'metadata',
   'text', 'foreignobject', 'lineargradient', 'radialgradient', 'filter', 'image', 'switch'])
+// Of those, the ones that are only ever drawn where something else refers to them.
+const UNDRAWN = new Set(['defs', 'symbol', 'clippath', 'mask', 'pattern', 'marker', 'style', 'script', 'title', 'desc', 'metadata',
+  'lineargradient', 'radialgradient', 'filter'])
 const MAX_POINTS = 400_000
+const TOO_DETAILED = 'This SVG has too much detail to read. Simplify it and try again.'
 
 type Matrix = [number, number, number, number, number, number] // x' = a x + c y + e, y' = b x + d y + f
 const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0]
@@ -198,6 +209,33 @@ function attributesOf(text: string): Attributes {
 }
 const hidden = (a: Attributes) => /(^|;)\s*display\s*:\s*none/i.test(a.style ?? '') || a.display === 'none'
 
+// ---------- clipping paths ----------
+
+const urlId = (text: string) => /url\(\s*['"]?#([^'")\s]+)/.exec(text)?.[1] ?? null
+const clipInCss = (text: string) => { const m = /clip-path\s*:\s*([^;]*)/i.exec(text); return m ? urlId(m[1]) : null }
+
+// Classes that set a clipping path in the file's style sheets. Illustrator writes them this way:
+// .cls-2 { clip-path: url(#clippath); }
+function clipClasses(text: string): Map<string, string> {
+  const out = new Map<string, string>()
+  const css = text.replace(/<!--[\s\S]*?-->/g, '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+  for (const [, sheet] of css.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) {
+    for (const [, selectors, rules] of sheet.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const id = clipInCss(rules)
+      if (id) for (const selector of selectors.split(',')) { const c = /^\s*\.([\w-]+)\s*$/.exec(selector); if (c) out.set(c[1], id) }
+    }
+  }
+  return out
+}
+
+// The clipping path an element uses, by its style, its class or its clip-path attribute.
+function clipOf(a: Attributes, byClass: Map<string, string>): string | null {
+  const inStyle = a.style ? clipInCss(a.style) : null
+  if (inStyle) return inStyle
+  for (const c of (a.class ?? '').split(/\s+/).reverse()) { const id = byClass.get(c); if (id) return id }
+  return a['clip-path'] ? urlId(a['clip-path']) : null
+}
+
 // A length in millimetres, or null when it's missing or a percentage.
 function lengthMm(text: string | undefined): number | null {
   if (!text) return null
@@ -267,8 +305,16 @@ export function readSvgDrawing(text: string, tolerance = 0.02): SvgDrawing {
   const paths: SvgPath[] = []
   let total = 0, element = 0, units: SizedBy = 'css'
   let rootScale = 0 // millimetres per user unit
+  let rootM = IDENTITY
   let pageW = 0, pageH = 0
-  type Frame = { name: string; m: Matrix; skip: boolean }
+  // Clipping paths, in their own coordinates, and where each is used. They're placed in the user space of the
+  // element that uses them, so they only become paths at the end, if the file has no shapes of its own.
+  const clipClass = clipClasses(text)
+  const clips = new Map<string, { shapes: { points: Vec[]; element: number }[]; elements: number }>()
+  const clipUses: { id: string; m: Matrix }[] = []
+  let clipTotal = 0, pictures = 0
+  // clip: the clipping path whose outline this element is part of
+  type Frame = { name: string; m: Matrix; skip: boolean; clip: string | null }
   const stack: Frame[] = []
   for (const tag of body.matchAll(/<(\/?)([A-Za-z_][\w:.-]*)([^>]*?)(\/?)>/g)) {
     const [, closing, rawName, rest, selfClosing] = tag
@@ -283,6 +329,13 @@ export function readSvgDrawing(text: string, tolerance = 0.02): SvgDrawing {
     const parent = stack[stack.length - 1]
     let m = parent ? parent.m : IDENTITY
     const skip = Boolean(parent?.skip) || SKIP.has(name) || hidden(a)
+    let clip: string | null = null
+    if (name === 'clippath') {
+      // objectBoundingBox clips are sized to whatever uses them, so they give no outline of their own.
+      clip = a.clippathunits?.toLowerCase() === 'objectboundingbox' || hidden(a) ? null : a.id ?? null
+      m = IDENTITY
+    } else if (parent?.clip && !SKIP.has(name) && !hidden(a)) clip = parent.clip
+    if (name === 'image' && !parent?.skip && !hidden(a)) pictures++
     if (name === 'svg' && !parent) {
       const vb = numbers(a.viewbox ?? '')
       const w = lengthMm(a.width), h = lengthMm(a.height)
@@ -308,29 +361,67 @@ export function readSvgDrawing(text: string, tolerance = 0.02): SvgDrawing {
       m = multiply(m, [1, 0, 0, 1, Number(a.x ?? 0) || 0, Number(a.y ?? 0) || 0])
     }
     if (a.transform) m = multiply(m, parseTransform(a.transform))
-    if (!skip && ['path', 'rect', 'circle', 'ellipse', 'polygon', 'polyline', 'line'].includes(name)) {
+    if (name === 'svg' && !parent) rootM = m
+    const shape = ['path', 'rect', 'circle', 'ellipse', 'polygon', 'polyline', 'line'].includes(name)
+    if (!skip && shape) {
       const tol = tolerance / Math.max(1e-12, matrixScale(m))
       const found = pathsOf(name, a, tol)
       for (const path of found) {
         total += path.points.length
-        if (total > MAX_POINTS) throw new SvgShapeError('This SVG has too much detail to read. Simplify it and try again.')
+        if (total > MAX_POINTS) throw new SvgShapeError(TOO_DETAILED)
         paths.push({ closed: path.closed, points: path.points.map(p => apply(m, p)), element })
       }
       element++
+    } else if (clip && shape) {
+      // A clipping path is a filled area, so every part of it is closed. Its scale on the page is known only
+      // where it's used, so curves are flattened as if it were used at the file's own scale.
+      const tol = tolerance / Math.max(1e-12, rootScale * matrixScale(m))
+      const entry = clips.get(clip) ?? { shapes: [], elements: 0 }
+      clips.set(clip, entry)
+      for (const path of pathsOf(name, a, tol)) {
+        if (path.points.length < 3) continue
+        clipTotal += path.points.length
+        if (clipTotal > MAX_POINTS) throw new SvgShapeError(TOO_DETAILED)
+        entry.shapes.push({ points: path.points.map(p => apply(m, p)), element: entry.elements })
+      }
+      entry.elements++
     }
-    if (!selfClosing) stack.push({ name, m, skip })
+    // Pictures and text are drawn too, though they aren't outlines, so a clip they use counts.
+    if (!parent?.skip && !hidden(a) && !UNDRAWN.has(name)) { const id = clipOf(a, clipClass); if (id) clipUses.push({ id, m }) }
+    if (!selfClosing) stack.push({ name, m, skip, clip })
   }
   if (!rootScale) throw new SvgShapeError('This file is not an SVG drawing.')
   // A file cut short, by a failed download or copy, has no closing tag. Its paths may be missing or broken.
   if (!/<\/(svg:)?svg\s*>/i.test(body)) throw new SvgShapeError('This SVG is cut short or damaged: it stops before its end. Export or download it again.')
-  if (!paths.length) throw new SvgShapeError('This SVG has no paths or shapes to use.')
+  // A file of pictures alone has no lines, but the clipping paths that trim the pictures are their outlines.
+  let fromClip = false
+  if (!paths.length && clips.size) {
+    const used = clipUses.filter(u => clips.get(u.id)?.shapes.length)
+    // A clip used in a way this reader doesn't follow is placed on the page as it is.
+    const placed = used.length ? used : [...clips.keys()].map(id => ({ id, m: rootM }))
+    const seen = new Set<string>()
+    for (const { id, m } of placed) {
+      const key = `${id} ${m.join(' ')}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const { shapes, elements } = clips.get(id)!
+      for (const s of shapes) {
+        total += s.points.length
+        if (total > MAX_POINTS) throw new SvgShapeError(TOO_DETAILED)
+        paths.push({ closed: true, points: s.points.map(p => apply(m, p)), element: element + s.element })
+      }
+      element += elements
+    }
+    fromClip = paths.length > 0
+  }
+  if (!paths.length) throw new SvgShapeError(pictures ? PICTURE_ONLY : 'This SVG has no paths or shapes to use.')
   // Without a usable page size, the drawing's own extent is the page.
   if (!(pageW > 0 && pageH > 0)) {
     let x1 = 0, y1 = 0
     for (const p of paths) for (const [x, y] of p.points) { x1 = Math.max(x1, x); y1 = Math.max(y1, y) }
     pageW = x1; pageH = y1
   }
-  return { width: pageW, height: pageH, paths, units }
+  return { width: pageW, height: pageH, paths, units, fromClip }
 }
 
 // ---------- Capture ----------
