@@ -37,7 +37,7 @@ export const FilePanel = memo(function FilePanel({ s, change, unsaved, busy, fro
       <SwitchField label="Smooth curves" checked={s.smoothCurves}
         tip="Write SVG lines as smooth curves through every node, with fewer corners. Off writes straight segments between nodes, as the Illustrator panel did."
         onChange={smoothCurves => change({ smoothCurves }, 'smoothCurves')} />
-      <p className="hint">Exports hold what the view shows: {contents}.{fromFile ? ' The page matches the imported SVG, so the result lines up with your artwork when placed at the artboard’s corner.' : ''}</p>
+      <p className="hint">Exports hold what the view shows: {contents}.{s.fill ? ' DXF holds no fill.' : ''}{fromFile ? ' The page matches the imported SVG, so the result lines up with your artwork when placed at the artboard’s corner.' : ''}</p>
     </Section>
 
     <Section title="For images">

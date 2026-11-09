@@ -56,6 +56,12 @@ export function drawGrowth(ctx: CanvasRenderingContext2D, strands: Strand[], rin
     ctx.setLineDash([])
   }
 
+  // Each closed line's inside, filled on its own as Illustrator fills separate paths.
+  if (s.fill) {
+    ctx.fillStyle = s.fillColor
+    for (const strand of strands) if (strand.closed && strand.points.length >= 6) { ctx.beginPath(); strandPath(ctx, strand); ctx.fill('nonzero') }
+  }
+
   ctx.beginPath()
   for (const strand of strands) strandPath(ctx, strand)
   ctx.strokeStyle = s.lineColor

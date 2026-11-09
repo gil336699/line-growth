@@ -10,6 +10,9 @@ export const StylePanel = memo(function StylePanel({ s, change }: { s: Settings;
       <LengthField label="Line width" mm={s.lineWidth} min={LIMITS.lineWidth[0]} max={LIMITS.lineWidth[1]} units={s.units} dpi={s.dpi} small
         tip="Stroke width of the lines in the preview, SVG and PNG. Auto tune sets it to suit the segment length." onChange={lineWidth => change({ lineWidth }, 'lineWidth')} />
       <ColorField label="Line colour" value={s.lineColor} tip="Colour of the lines and nodes." onChange={lineColor => change({ lineColor }, 'lineColor')} />
+      <SwitchField label="Fill" checked={s.fill} tip="Fill the inside of each closed line, for a two-tone pattern. Open lines have no inside, so they stay lines. SVG exports the fill as its own group under the lines; PNG includes it; DXF holds the lines only."
+        onChange={fill => change({ fill }, 'fill')} />
+      {s.fill && <ColorField label="Fill colour" value={s.fillColor} tip="Colour of the inside of closed lines." onChange={fillColor => change({ fillColor }, 'fillColor')} />}
       <ColorField label="Background" value={s.background} tip="Sheet colour in the preview and PNG. SVG and DXF files have no background." onChange={background => change({ background }, 'background')} />
     </Section>
     <Section title="Show">

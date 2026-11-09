@@ -17,8 +17,8 @@ export type Settings = {
   maxNodes: number; stepsPerFrame: number
   segmentLength: number; repelRadius: number; repulsion: number; alignment: number; attraction: number; stepSize: number
   randomness: number; seed: number
-  // Style
-  lineWidth: number; lineColor: string; background: string
+  // Style. fill: the inside of each closed line is filled with fillColor, for a two-tone pattern.
+  lineWidth: number; lineColor: string; background: string; fill: boolean; fillColor: string
   showBoundary: boolean; showNodes: boolean
   // Export
   smoothCurves: boolean; transparentPng: boolean
@@ -32,7 +32,7 @@ export const DEFAULTS: Settings = {
   // Auto tune replaces these for the default sheet; they are what it picks for a 200 mm circle.
   maxNodes: 2160, stepsPerFrame: 2, segmentLength: 2.78, repelRadius: 7.22, repulsion: 1.07, alignment: 0.49, attraction: 0.47, stepSize: 0.25,
   randomness: 0.25, seed: 1,
-  lineWidth: 0.3, lineColor: '#1d1d1f', background: '#ffffff',
+  lineWidth: 0.3, lineColor: '#1d1d1f', background: '#ffffff', fill: false, fillColor: '#1d1d1f',
   showBoundary: true, showNodes: false,
   smoothCurves: true, transparentPng: false,
 }
@@ -79,6 +79,6 @@ export function sanitizeSettings(raw: unknown): Settings {
   s.maxNodes = Math.round(s.maxNodes); s.stepsPerFrame = Math.round(s.stepsPerFrame); s.startCount = Math.round(s.startCount); s.seed = Math.round(s.seed)
   s.margin = clamp(s.margin, [0, marginMax(s)])
   for (const key of ['segmentLength', 'repelRadius', 'stepSize'] as const) s[key] = clamp(s[key], scaledRange(key, s))
-  for (const key of ['lineColor', 'background'] as const) if (!/^#[0-9a-f]{6}$/i.test(s[key])) s[key] = DEFAULTS[key]
+  for (const key of ['lineColor', 'background', 'fillColor'] as const) if (!/^#[0-9a-f]{6}$/i.test(s[key])) s[key] = DEFAULTS[key]
   return s
 }
