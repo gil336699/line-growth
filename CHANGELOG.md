@@ -1,5 +1,9 @@
 # Line Growth Changelog
 
+## 1.1.1 2026-11-08
+
+- **SVGs that are pictures can be imported.** When Illustrator can't write a shape's look as SVG, it saves a picture of the shape, trimmed to its outline by a clipping mask. Such a file has no paths, so importing it said "This SVG has no paths or shapes to use." Line Growth now uses the clipping mask's outline when a file has no shapes of its own, and the status says so. Gil's JHU ICE asset, a page with a ticket-shaped window, now imports, and lines grow around the window. A file that is only a picture, with no clipping mask, says so and how to fix it in Illustrator.
+
 ## 1.1.0 2026-11-08
 
 - **Max nodes sets how fine the lines are.** With Auto tune on, raise Max nodes above Auto tune's choice and Auto tune keeps your number and scales the segment length, repel radius, step size and line width to suit it: four times the nodes, lines half as far apart, with the same forces and look. Before, lines filled the shape at the panel's lengths and stopped, so a higher Max nodes did nothing. The default circle at 9,000 nodes now fills to 9,000 in 6.5 s, and Gil's pill with a hole at 20,000 fills to 17,637. It works while lines grow, and a new shape or start keeps your number. Lower than Auto tune's choice, Max nodes only caps the nodes, as before. Turning Auto tune off and on again hands Max nodes back to Auto tune.

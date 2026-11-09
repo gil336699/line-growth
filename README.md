@@ -56,6 +56,8 @@ The Illustrator panel captured a selection and inserted the result back into the
 
 Illustrator writes SVG without a size, in points, so Line Growth reads such files at 72 points per inch and switches the units to points.
 
+Pictures have no lines to grow. When Illustrator can't write a shape's look as SVG, such as a freeform gradient, a mesh or an effect, it saves a picture of the shape, trimmed to its outline by a clipping mask. Line Growth then uses the clipping masks' outlines, and the status says so. A file that is only a picture, with no clipping mask, can't be used: select the shape in Illustrator, click Clear Appearance in the Appearance panel, add a stroke and export again.
+
 ## Feature reference
 
 ### Boundary and start
