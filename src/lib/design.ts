@@ -1,7 +1,7 @@
 // A design: its settings, an imported boundary if any, the start lines when they were drawn or imported,
 // and the grown lines. Also the rules for what each change does to the growth, so the page and the tests
 // agree. Plain TypeScript, no React.
-import { autoTune } from '../growth/autotune'
+import { autoTune, forNodes } from '../growth/autotune'
 import { separateStarts } from '../growth/separate'
 import { boundaryOf, type Boundary } from '../growth/boundary'
 import type { GrowthParams, Strand } from '../growth/engine'
@@ -77,7 +77,9 @@ export function growthParams(s: Settings): GrowthParams {
   }
 }
 
-// Auto tune: starting values for this boundary and start shape, as the panel chose them on Capture.
+// Auto tune: starting values for this boundary and start shape, as the panel chose them on Capture. Once Max
+// nodes has been set by hand (autoNodes off), the lengths are scaled to suit it instead, so more nodes give
+// finer, denser lines.
 export function tuned(d: Pick<Design, 'settings' | 'imported' | 'custom'>): Settings {
   const s = d.settings
   if (!s.autoTune) return s
@@ -85,8 +87,14 @@ export function tuned(d: Pick<Design, 'settings' | 'imported' | 'custom'>): Sett
   const start = startOf(d)
   const box = boxOf([...b.rings, ...start.map(p => p.points)])
   const growLength = start.reduce((sum, p) => sum + pathLength(p.points, p.closed), 0)
-  const t = autoTune(box, growLength, b.length, start.some(p => p.closed))
-  return sanitizeSettings({ ...s, ...t, lineWidth: Math.max(0.01, t.lineWidth) })
+  const panel = autoTune(box, growLength, b.length, start.some(p => p.closed))
+  const base = sanitizeSettings({ ...s, ...panel, lineWidth: Math.max(0.01, panel.lineWidth) })
+  if (s.autoNodes) return base
+  // Scaled from the lengths as kept within the sheet's ranges, which is what Auto tune really uses: a drawing
+  // with a great deal of start line asks the panel's rules for far longer lengths than the ranges allow.
+  // A hand-set Max nodes also keeps the Speed you chose.
+  const t = forNodes({ ...panel, segmentLength: base.segmentLength, repelRadius: base.repelRadius, stepSize: base.stepSize, lineWidth: base.lineWidth }, s.maxNodes)
+  return sanitizeSettings({ ...base, ...t, stepsPerFrame: s.stepsPerFrame, lineWidth: Math.max(0.01, t.lineWidth) })
 }
 
 export function freshDesign(settings: Settings, imported: Imported | null = null, custom: Path[] = []): Design {
@@ -135,8 +143,14 @@ export function planChange(d: Design, patch: Partial<Settings>, imported: Import
   const startChanged = START.some(k => next[k] !== s[k]) || (next.start === 'circles' && next.seed !== s.seed)
   const sheetChanged = SHEET.some(k => next[k] !== s[k])
   const base = { settings: next, imported, custom: d.custom }
-  // Turning Auto tune on tunes now, as the panel did, but keeps the lines grown so far.
-  if (next.autoTune && !s.autoTune && !shapeChanged && !startChanged) return { design: { ...d, settings: tuned(base) }, discards: false }
+  // Turning Auto tune on tunes now, as the panel did, Max nodes included, but keeps the lines grown so far.
+  if (next.autoTune && !s.autoTune) { next.autoNodes = true; if (!shapeChanged && !startChanged) return { design: { ...d, settings: tuned(base) }, discards: false } }
+  // With Auto tune on, Max nodes set by hand stays, and the lengths follow it. The lines grown so far keep
+  // growing with the new lengths.
+  if (next.autoTune && patch.maxNodes !== undefined && next.maxNodes !== s.maxNodes && !shapeChanged && !startChanged) {
+    next.autoNodes = false
+    return { design: { ...d, settings: tuned(base) }, discards: false }
+  }
   if (shapeChanged || startChanged) {
     const settings = tuned(base)
     return { design: { ...base, settings, state: resetState({ ...base, settings }) }, discards: grown }

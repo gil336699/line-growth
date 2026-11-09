@@ -11,8 +11,9 @@ export type Settings = {
   shape: BoundaryShape; margin: number
   // Start
   start: StartShape; startSize: number; startCount: number
-  // Growth
-  autoTune: boolean
+  // Growth. autoNodes: Auto tune picks Max nodes too; once Max nodes is set by hand, Auto tune keeps it and
+  // scales the lengths to suit it.
+  autoTune: boolean; autoNodes: boolean
   maxNodes: number; stepsPerFrame: number
   segmentLength: number; repelRadius: number; repulsion: number; alignment: number; attraction: number; stepSize: number
   randomness: number; seed: number
@@ -27,7 +28,7 @@ export const DEFAULTS: Settings = {
   units: 'mm', width: 200, height: 200, dpi: 300,
   shape: 'ellipse', margin: 5,
   start: 'circle', startSize: 15, startCount: 5,
-  autoTune: true,
+  autoTune: true, autoNodes: true,
   // Auto tune replaces these for the default sheet; they are what it picks for a 200 mm circle.
   maxNodes: 2160, stepsPerFrame: 2, segmentLength: 2.78, repelRadius: 7.22, repulsion: 1.07, alignment: 0.49, attraction: 0.47, stepSize: 0.25,
   randomness: 0.25, seed: 1,

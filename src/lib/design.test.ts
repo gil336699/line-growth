@@ -35,6 +35,67 @@ describe('auto tune', () => {
   })
 })
 
+describe('auto tune and max nodes', () => {
+  it('scales the lengths to a hand-set Max nodes: four times the nodes, half the spacing, the same forces', () => {
+    const d = freshDesign(DEFAULTS)
+    const s0 = d.settings
+    const { design, discards } = planChange(d, { maxNodes: s0.maxNodes * 4 })
+    const s = design.settings
+    expect(discards).toBe(false)
+    expect(design.state).toBe(d.state)
+    expect(s.autoNodes).toBe(false)
+    expect(s.maxNodes).toBe(s0.maxNodes * 4)
+    for (const k of ['segmentLength', 'repelRadius', 'stepSize', 'lineWidth'] as const) expect(s[k]).toBeCloseTo(s0[k] / 2, 6)
+    for (const k of ['repulsion', 'alignment', 'attraction', 'stepsPerFrame'] as const) expect(s[k]).toBe(s0[k])
+  })
+
+  it('keeps a hand-set Max nodes through a new shape, and gives it back to Auto tune when Auto tune is turned on again', () => {
+    const fine = planChange(freshDesign(DEFAULTS), { maxNodes: 9000 }).design
+    const rect = planChange(fine, { shape: 'rect' }).design
+    expect(rect.settings.maxNodes).toBe(9000)
+    // The panel's rectangle tuning, scaled to 9,000 nodes.
+    const panel = planChange(freshDesign(DEFAULTS), { shape: 'rect' }).design.settings
+    expect(rect.settings.segmentLength).toBeCloseTo(panel.segmentLength * Math.sqrt(panel.maxNodes / 9000), 6)
+    const off = planChange(rect, { autoTune: false }).design
+    const on = planChange(off, { autoTune: true }).design
+    expect(on.settings.autoNodes).toBe(true)
+    expect(on.settings.maxNodes).toBe(panel.maxNodes)
+    expect(on.settings.segmentLength).toBeCloseTo(panel.segmentLength, 6)
+  })
+
+  it('only caps the nodes below Auto tune’s own choice, as before', () => {
+    const d = freshDesign(DEFAULTS)
+    const s = planChange(d, { maxNodes: 400 }).design.settings
+    expect(s.maxNodes).toBe(400)
+    expect(s.segmentLength).toBe(d.settings.segmentLength)
+  })
+
+  it('leaves the lengths alone when Auto tune is off', () => {
+    const manual = planChange(freshDesign(DEFAULTS), { autoTune: false }).design
+    const s = planChange(manual, { maxNodes: 9000 }).design.settings
+    expect(s.maxNodes).toBe(9000)
+    expect(s.segmentLength).toBe(manual.settings.segmentLength)
+  })
+
+  it('opens old projects with Auto tune choosing Max nodes', () => {
+    const { autoNodes, ...old } = DEFAULTS
+    expect(autoNodes).toBe(true)
+    expect(sanitizeSettings(old).autoNodes).toBe(true)
+  })
+
+  it('lets lines use the nodes: at four times Max nodes, the default circle fills with about four times as many', () => {
+    const run = (d: Design) => {
+      const g = new Grower(d.state.strands.map(s => ({ ...s, points: s.points.slice() })), 0, growthParams(d.settings), boundaryOfDesign(d))
+      while (!g.filled && !g.settling && g.step < 6000) g.stepOnce()
+      return g.nodes
+    }
+    const base = planChange(freshDesign(DEFAULTS), { maxNodes: 4000 }).design
+    const fine = planChange(base, { maxNodes: 16000 }).design
+    const a = run(base), b = run(fine)
+    expect(b / a).toBeGreaterThan(3.3)
+  }, 60_000)
+})
+
 describe('start shapes', () => {
   const b = new Boundary(boundaryOfDesign({ settings: DEFAULTS, imported: null }).rings)
   it('makes every start shape inside the boundary', () => {

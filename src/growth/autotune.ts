@@ -47,6 +47,16 @@ export function autoTune(box: Box, growLength: number, boundaryLength: number, a
   }
 }
 
+// The same tuning for a larger node budget. Lines that fill a shape use about (area ÷ segment length²) nodes,
+// so the lengths scale with √(tuned nodes ÷ nodes): four times the nodes gives lines half as far apart, with
+// the same look. The forces stay as tuned. A smaller budget only caps the nodes, as before: coarser lengths
+// would dwarf the start shapes, which suit the tuned scale (at a fifth of the nodes, the default circle
+// stalled at half its budget).
+export function forNodes(t: Tuned, nodes: number): Tuned {
+  const f = Math.sqrt(t.maxNodes / Math.max(t.maxNodes, nodes))
+  return { ...t, maxNodes: nodes, segmentLength: t.segmentLength * f, repelRadius: t.repelRadius * f, stepSize: t.stepSize * f, lineWidth: t.lineWidth * f }
+}
+
 // A length range in millimetres for a sheet whose larger side is `span` mm.
 export const lengthRange = (key: 'segmentLength' | 'repelRadius' | 'stepSize', span: number): [number, number] =>
   [SIM_RANGE[key][0] * span / SIM_SPAN, SIM_RANGE[key][1] * span / SIM_SPAN]

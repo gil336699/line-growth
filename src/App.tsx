@@ -304,9 +304,11 @@ export function App() {
   const strained = growth.running && stats.held > Math.max(40, stats.nodes * 0.02)
     && (ratio > 4
       ? `Lines are packed too tightly to move freely. The repel radius is ${ratio.toFixed(1)} segment lengths; keep it under about 5${s.autoTune ? '' : ', or turn on Auto tune'}.`
-      : 'Lines are packed too tightly to move freely. Make the segment length, repel radius and step size smaller together, and raise Max nodes.')
+      : s.autoTune
+        ? 'Lines are packed too tightly to move freely. Raise Max nodes: Auto tune then makes the lines finer, with room to move.'
+        : 'Lines are packed too tightly to move freely. Make the segment length, repel radius and step size smaller together, and raise Max nodes.')
   const statusText = status?.text ?? (strained || (growth.stopping ? 'Stopping after the current step…'
-    : growth.running ? `${stats.settling ? 'Settling at max nodes' : stats.filled ? 'Filled at this segment length, settling' : 'Growing'} · ${counts}` : counts))
+    : growth.running ? `${stats.settling ? 'Settling at max nodes' : stats.filled ? (s.autoTune ? 'Filled the shape; raise Max nodes for finer lines' : 'Filled at this segment length, settling') : 'Growing'} · ${counts}` : counts))
 
   return <main className="studio">
     <TooltipLayer />
