@@ -1,5 +1,9 @@
 # Line Growth Changelog
 
+## 1.2.1 2026-11-09
+
+- **One closed path up to 32,000 nodes, and DXF opens whole in Illustrator.** Tested in Illustrator 2026: it keeps a path's point count in 16 bits, so a path of 32,767 points or more opens empty or cut short (an 82,406-point line opened as 16,870, an 80,000-point DXF polyline as 14,464), and Join refuses to make one (30,001 points joined, 40,001 didn't). Closed paths of 32,000 points open whole. SVG and DXF now write a line of up to 32,000 nodes as one path, closed if the line is; before, SVG split lines at 10,000. A longer line is pieces of up to 32,000 that meet end to end, now in DXF too, where it had been one polyline that Illustrator cut short. The File tab says when a line exports in pieces, and how to keep it whole. Checked by exporting from the app and opening in Illustrator: a 30,000-node circle opened as one closed path in SVG and DXF, and an 80,000-node line as 3 pieces holding every point, with its fill whole.
+
 ## 1.2.0 2026-11-09
 
 - **Fill.** A new Fill switch and colour on the Style tab fill the inside of each closed line, for a two-tone pattern, in the preview, SVG and PNG. In SVG the fill is its own group, `fill`, under the lines, so either can be used or removed in Illustrator. Filling the split pieces of a long line in Illustrator closed each with a straight edge, leaving solid wedges across Gil's ticket design. Line Growth's fill is one compound path per line, of open pieces plus a part whose edges cancel theirs, so it fills exactly like the whole line. Checked in Illustrator 2026 by script: Gil's 82,406-node line opened with all 82,432 points (the line plus its 26 cuts) and filled cleanly. DXF holds the lines only.
