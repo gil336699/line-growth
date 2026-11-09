@@ -1,5 +1,10 @@
 # Line Growth Changelog
 
+## 1.2.0 2026-11-09
+
+- **Fill.** A new Fill switch and colour on the Style tab fill the inside of each closed line, for a two-tone pattern, in the preview, SVG and PNG. In SVG the fill is its own group, `fill`, under the lines, so either can be used or removed in Illustrator. Filling the split pieces of a long line in Illustrator closed each with a straight edge, leaving solid wedges across Gil's ticket design. Line Growth's fill is one compound path per line, of open pieces plus a part whose edges cancel theirs, so it fills exactly like the whole line. Checked in Illustrator 2026 by script: Gil's 82,406-node line opened with all 82,432 points (the line plus its 26 cuts) and filled cleanly. DXF holds the lines only.
+- **Checked in Illustrator.** Illustrator 2026 kept only 16,870 of the 82,406 points of Gil's line written as one path, and lines split into pieces of up to 10,000 open whole. Straight and curved test paths of up to 16,871 points opened whole too, but took minutes each, so pieces stay at 10,000.
+
 ## 1.1.2 2026-11-08
 
 - **Long lines open whole in Illustrator.** Illustrator cuts a path off at about 32,000 anchor points and closes what's left with a straight line back to the start. Gil's Voronoi ticket design, one line of 83,142 nodes, opened as a patch of coral with a diagonal line across the page. SVG export now writes a line of more than 10,000 nodes as a group of paths of up to 10,000 that meet end to end, with the same curves. Lines of up to 10,000 nodes are written as before.

@@ -28,7 +28,7 @@ Every push to `main` is built and published to GitHub Pages by `.github/workflow
 ## Layout
 
 - **Sheet.** The sheet fills the window, with a soft shadow. The boundary shows as a dashed mint guide, as in the Illustrator panel.
-- **Left panel.** Four tabs: **Grow** (node limit, speed and the forces), **Shape** (sheet size, boundary, start lines), **Style** (line width and colours) and **File** (project and exports). A dot on File means unsaved changes.
+- **Left panel.** Four tabs: **Grow** (node limit, speed and the forces), **Shape** (sheet size, boundary, start lines), **Style** (line width, colours and fill) and **File** (project and exports). A dot on File means unsaved changes.
 - **Above the sheet.** The Draw, Erase and Pan tools on the left; Boundary, Nodes and zoom on the right. A caption explains the current tool.
 - **Below the sheet.** Grow or Pause, Step and Reset, the status, and Undo and Redo.
 - **Right.** Measurements: nodes, lines, steps, line length, average segment, the boundary and the growing speed.
@@ -56,7 +56,7 @@ The Illustrator panel captured a selection and inserted the result back into the
 
 Illustrator writes SVG without a size, in points, so Line Growth reads such files at 72 points per inch and switches the units to points.
 
-Illustrator cuts a path off at about 32,000 anchor points and closes the rest with a straight line, so an exported line of more than 10,000 nodes comes as a group of paths that meet end to end. Keep them as they are: joining them in Illustrator would make one path too long again.
+Illustrator cuts a path off at about 32,000 anchor points and closes the rest with a straight line, so an exported line of more than 10,000 nodes comes as a group of paths that meet end to end. Keep them as they are: joining them in Illustrator would make one path too long again. Don't fill those pieces in Illustrator either: it fills an open path by closing it with a straight edge, which leaves solid wedges across the pattern. For a filled look, turn on **Fill** on the Style tab. The fill is then its own group, `fill`, with one shape per closed line that fills exactly like the whole line, even when the line is in pieces: it's one compound path whose hidden edges cancel. On screen, those edges can show as a faint hairline. A line of 82,406 nodes took Illustrator 2026 about two minutes to open.
 
 Pictures have no lines to grow. When Illustrator can't write a shape's look as SVG, such as a freeform gradient, a mesh or an effect, it saves a picture of the shape, trimmed to its outline by a clipping mask. Line Growth then uses the clipping masks' outlines, and the status says so. A file that is only a picture, with no clipping mask, can't be used: select the shape in Illustrator, click Clear Appearance in the Appearance panel, add a stroke and export again.
 
@@ -80,9 +80,9 @@ Every export holds what the view shows: the lines, plus the boundary and the nod
 
 | Export | Contents | Units |
 | --- | --- | --- |
-| SVG | One path per line, as smooth curves through every node (or straight segments with Smooth curves off), stroked at the line width. A line of more than 10,000 nodes is a group of paths of up to 10,000 that meet end to end. The boundary is a solid mint path in group `boundary`; nodes are dots in group `nodes`. No background. | mm, in, pt or px, as the sheet's units |
+| SVG | One path per line, as smooth curves through every node (or straight segments with Smooth curves off), stroked at the line width. A line of more than 10,000 nodes is a group of paths of up to 10,000 that meet end to end. With Fill on, group `fill`, under the lines, holds one filled shape per closed line. The boundary is a solid mint path in group `boundary`; nodes are dots in group `nodes`. No background. | mm, in, pt or px, as the sheet's units |
 | DXF | AutoCAD R12 text. One polyline per line on layer `LINES`, the boundary on `BOUNDARY`, nodes as points on `NODES`. | mm, or in for inch sheets |
-| PNG | The design at the sheet's pixels per inch, optionally with a transparent background. | px |
+| PNG | The design at the sheet's pixels per inch, with the fill when it's on, optionally with a transparent background. | px |
 | Project | Settings, the imported boundary, the start lines and every grown node, as `.linegrowth.json` (schema `line-growth/project`, version 1). | mm |
 
 ## Controls
@@ -104,6 +104,7 @@ Every export holds what the view shows: the lines, plus the boundary and the nod
 | Margin | Gap between the sheet edge and a Rectangle or Ellipse boundary. |
 | Start from, Size, Count | The start lines, their size as a share of the boundary, and the number of circles. |
 | Line width, colours | Line width and colour, and the sheet colour for the preview and PNG. |
+| Fill | Fills the inside of each closed line with the fill colour, for a two-tone pattern. Open lines have no inside, so they stay lines. In the preview, SVG and PNG; DXF holds the lines only. |
 | Boundary, Nodes | Show the boundary guide and the nodes, in the view and in exports. |
 | Smooth curves | SVG lines as curves through the nodes, or straight segments. |
 
