@@ -1,5 +1,9 @@
 # Line Growth Changelog
 
+## 1.1.2 2026-11-08
+
+- **Long lines open whole in Illustrator.** Illustrator cuts a path off at about 32,000 anchor points and closes what's left with a straight line back to the start. Gil's Voronoi ticket design, one line of 83,142 nodes, opened as a patch of coral with a diagonal line across the page. SVG export now writes a line of more than 10,000 nodes as a group of paths of up to 10,000 that meet end to end, with the same curves. Lines of up to 10,000 nodes are written as before.
+
 ## 1.1.1 2026-11-08
 
 - **SVGs that are pictures can be imported.** When Illustrator can't write a shape's look as SVG, it saves a picture of the shape, trimmed to its outline by a clipping mask. Such a file has no paths, so importing it said "This SVG has no paths or shapes to use." Line Growth now uses the clipping mask's outline when a file has no shapes of its own, and the status says so. Gil's JHU ICE asset, a page with a ticket-shaped window, now imports, and lines grow around the window. A file that is only a picture, with no clipping mask, says so and how to fix it in Illustrator.

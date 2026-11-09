@@ -56,6 +56,8 @@ The Illustrator panel captured a selection and inserted the result back into the
 
 Illustrator writes SVG without a size, in points, so Line Growth reads such files at 72 points per inch and switches the units to points.
 
+Illustrator cuts a path off at about 32,000 anchor points and closes the rest with a straight line, so an exported line of more than 10,000 nodes comes as a group of paths that meet end to end. Keep them as they are: joining them in Illustrator would make one path too long again.
+
 Pictures have no lines to grow. When Illustrator can't write a shape's look as SVG, such as a freeform gradient, a mesh or an effect, it saves a picture of the shape, trimmed to its outline by a clipping mask. Line Growth then uses the clipping masks' outlines, and the status says so. A file that is only a picture, with no clipping mask, can't be used: select the shape in Illustrator, click Clear Appearance in the Appearance panel, add a stroke and export again.
 
 ## Feature reference
@@ -78,7 +80,7 @@ Every export holds what the view shows: the lines, plus the boundary and the nod
 
 | Export | Contents | Units |
 | --- | --- | --- |
-| SVG | One path per line, as smooth curves through every node (or straight segments with Smooth curves off), stroked at the line width. The boundary is a solid mint path in group `boundary`; nodes are dots in group `nodes`. No background. | mm, in, pt or px, as the sheet's units |
+| SVG | One path per line, as smooth curves through every node (or straight segments with Smooth curves off), stroked at the line width. A line of more than 10,000 nodes is a group of paths of up to 10,000 that meet end to end. The boundary is a solid mint path in group `boundary`; nodes are dots in group `nodes`. No background. | mm, in, pt or px, as the sheet's units |
 | DXF | AutoCAD R12 text. One polyline per line on layer `LINES`, the boundary on `BOUNDARY`, nodes as points on `NODES`. | mm, or in for inch sheets |
 | PNG | The design at the sheet's pixels per inch, optionally with a transparent background. | px |
 | Project | Settings, the imported boundary, the start lines and every grown node, as `.linegrowth.json` (schema `line-growth/project`, version 1). | mm |
