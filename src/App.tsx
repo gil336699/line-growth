@@ -18,6 +18,7 @@ import { saveFile } from './lib/saveFile'
 import { DEFAULTS, LIMITS, sanitizeSettings, type Settings } from './lib/settings'
 import { growthSvg } from './lib/svgExport'
 import { captureDrawing, readSvgDrawing, SvgShapeError } from './lib/svgImport'
+import { MAX_PATH_SEGMENTS, segmentCount } from './lib/pieces'
 import { pixelSize, toUnits, trimZeros, UNIT_LABEL } from './lib/units'
 import { useGrowth, type Status } from './useGrowth'
 
@@ -88,6 +89,8 @@ export function App() {
   const boundaryPoints = useMemo(() => boundary.repellers(Math.max(s.segmentLength, boundary.length / 20_000)).x.length, [boundary, s.segmentLength])
   // The lines as the worker last sent them; stats.revision changes with every frame.
   const strands = growth.live.current.strands
+  // How many paths the longest line exports as, past Illustrator's limit on points in a path.
+  const splitInto = strands.reduce((most, t) => Math.max(most, Math.ceil(segmentCount(t.points.length / 2, t.closed) / MAX_PATH_SEGMENTS)), 1)
 
   // Keep a copy of the session a moment after the last change, while nothing is growing.
   const { current, running, unsaved: unsavedNow } = growth
@@ -337,7 +340,7 @@ export function App() {
       </TabPanel>
       <TabPanel idBase="design" id="style" value={tab}><StylePanel s={s} change={change} /></TabPanel>
       <TabPanel idBase="design" id="file" value={tab}>
-        <FilePanel s={s} change={change} unsaved={unsaved} busy={busy} openError={openError} fromFile={s.shape === 'imported' && Boolean(design.imported)}
+        <FilePanel s={s} change={change} splitInto={splitInto} unsaved={unsaved} busy={busy} openError={openError} fromFile={s.shape === 'imported' && Boolean(design.imported)}
           onNew={newDesign} onOpen={openProject} onSave={() => void saveProject()} onExport={kind => void exportFile(kind)} />
       </TabPanel>
       <input ref={fileInput} type="file" accept=".json,application/json" hidden aria-label="Choose a project file" onChange={event => {

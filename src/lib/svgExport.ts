@@ -4,6 +4,7 @@
 import type { Strand } from '../growth/engine'
 import type { Polygon } from '../growth/geometry'
 import { num } from './format'
+import { MAX_PATH_SEGMENTS, pieceRanges, segmentCount } from './pieces'
 import type { Settings } from './settings'
 import { smoothSegments } from './smooth'
 import { BOUNDARY_COLOR, boundaryWidth, nodeRadius } from './style'
@@ -27,31 +28,26 @@ export function strandPath(strand: Strand, smooth: boolean): string {
   return strand.closed ? `${d}Z` : d
 }
 
-// Illustrator cuts a path off at about 32,000 anchor points and closes what's left with a straight line back to
-// its start, so a longer line is written as several paths that meet end to end, of at most this many
-// segments each.
-export const MAX_PATH_SEGMENTS = 10_000
+export { MAX_PATH_SEGMENTS } from './pieces'
 
-// A line's path data, in pieces when it's too long for one path. Each piece starts at the node where the one
-// before it ends, written the same way, so they join exactly; a split closed line's last piece ends at its start.
+// A line's path data, in pieces when it's too long for one path in Illustrator. Each piece starts at the node where
+// the one before it ends, written the same way, so they join exactly; a split closed line's last piece ends at its
+// start.
 export function strandPaths(strand: Strand, smooth: boolean, max = MAX_PATH_SEGMENTS): string[] {
   const p = strand.points, n = p.length / 2
   if (n === 0) return []
-  const count = strand.closed ? n : n - 1 // segments, the closing one included
-  if (count <= max) return [strandPath(strand, smooth)]
+  const ranges = pieceRanges(segmentCount(n, strand.closed), max)
+  if (ranges.length === 1) return [strandPath(strand, smooth)]
   const cubics = smooth && n > 2 ? smoothSegments(strand) : null
   const node = (i: number) => { const k = i % n; return `${num(p[k * 2])} ${num(p[k * 2 + 1])}` }
-  const pieces = Math.ceil(count / max), size = Math.ceil(count / pieces)
-  const out: string[] = []
-  for (let start = 0; start < count; start += size) {
+  return ranges.map(([start, end]) => {
     let d = `M${node(start)}`
-    for (let i = start; i < Math.min(count, start + size); i++) {
+    for (let i = start; i < end; i++) {
       if (cubics) { const [a, b, c, e] = cubics[i]; d += `C${num(a)} ${num(b)} ${num(c)} ${num(e)} ${node(i + 1)}` }
       else d += `L${node(i + 1)}`
     }
-    out.push(d)
-  }
-  return out
+    return d
+  })
 }
 
 // Where to cut a closed line too long for one path into pieces for its fill: each cut is the node, between half

@@ -3,6 +3,7 @@ import { listWords } from '../lib/listWords'
 import { pngProblem } from '../lib/render'
 import type { Settings } from '../lib/settings'
 import { exportContents } from '../lib/svgExport'
+import { MAX_PATH_SEGMENTS } from '../lib/pieces'
 import { pixelSize } from '../lib/units'
 import { Button, Section, SwitchField } from './Controls'
 import type { Change } from './GrowPanel'
@@ -10,8 +11,8 @@ import type { Change } from './GrowPanel'
 export type ExportKind = 'svg' | 'dxf' | 'png'
 
 // Memoised: the panel only re-renders when its own props change, not on every growth frame.
-export const FilePanel = memo(function FilePanel({ s, change, unsaved, busy, fromFile, onNew, onOpen, onSave, onExport, openError }: {
-  s: Settings; change: Change; unsaved: boolean; busy: string | false; fromFile: boolean
+export const FilePanel = memo(function FilePanel({ s, change, splitInto, unsaved, busy, fromFile, onNew, onOpen, onSave, onExport, openError }: {
+  s: Settings; change: Change; splitInto: number; unsaved: boolean; busy: string | false; fromFile: boolean
   onNew: () => void; onOpen: () => void; onSave: () => void; onExport: (kind: ExportKind) => void; openError: string
 }) {
   const [pw, ph] = pixelSize(s.width, s.height, s.dpi)
@@ -32,11 +33,12 @@ export const FilePanel = memo(function FilePanel({ s, change, unsaved, busy, fro
     <Section title="For Illustrator, plotters and lasers">
       <div className="button-row">
         <Button tip={`The lines as paths at real size, sized in ${fileUnits}, on a page the size of the sheet. Opens in Illustrator, Inkscape, Figma and laser software.`} unavailable={busy} onClick={() => onExport('svg')}>SVG</Button>
-        <Button tip={`AutoCAD R12 DXF in ${s.units === 'in' ? 'inches' : 'millimetres'}, one polyline per line, for CAD, plotters and CAM.`} unavailable={busy} onClick={() => onExport('dxf')}>DXF</Button>
+        <Button tip={`AutoCAD R12 DXF in ${s.units === 'in' ? 'inches' : 'millimetres'}, one polyline per line (past Illustrator’s limit, polylines that meet end to end), for CAD, plotters and CAM.`} unavailable={busy} onClick={() => onExport('dxf')}>DXF</Button>
       </div>
       <SwitchField label="Smooth curves" checked={s.smoothCurves}
         tip="Write SVG lines as smooth curves through every node, with fewer corners. Off writes straight segments between nodes, as the Illustrator panel did."
         onChange={smoothCurves => change({ smoothCurves }, 'smoothCurves')} />
+      {splitInto > 1 && <p className="hint warning">Illustrator can’t hold a path of 32,767 points or more, so the longest line exports as {splitInto} paths that meet end to end, in SVG and DXF{s.fill ? ', and its fill as one shape that fills exactly' : ''}. For one closed path, keep each line at {MAX_PATH_SEGMENTS.toLocaleString()} nodes or fewer with Max nodes on the Grow tab.</p>}
       <p className="hint">Exports hold what the view shows: {contents}.{s.fill ? ' DXF holds no fill.' : ''}{fromFile ? ' The page matches the imported SVG, so the result lines up with your artwork when placed at the artboard’s corner.' : ''}</p>
     </Section>
 

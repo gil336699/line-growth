@@ -166,6 +166,7 @@ button.wide { width: 100%; margin-top: 10px; }
 .hint { margin-top: 8px; color: var(--label-2); font-size: 12px; line-height: 1.4; }
 .hint b { color: var(--label); font-weight: 600; }
 .hint.error { color: var(--red); }
+.hint.warning { color: var(--orange); }
 
 select {
   min-height: 28px; padding: 0 28px 0 10px; border: 0; border-radius: var(--r-control);

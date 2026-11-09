@@ -22,12 +22,12 @@ describe('SVG export', () => {
   it('splits a line too long for Illustrator into pieces that meet end to end', () => {
     for (const smooth of [true, false]) {
       for (const closed of [true, false]) {
-        const line = circle(25_001, closed)
+        const line = circle(2 * MAX_PATH_SEGMENTS + 2, closed)
         const pieces = strandPaths(line, smooth)
         expect(pieces).toHaveLength(3)
         for (const d of pieces) expect(anchors(d)).toBeLessThanOrEqual(MAX_PATH_SEGMENTS + 1)
         // Every segment is written once, and each piece starts where the one before ends.
-        expect(pieces.reduce((sum, d) => sum + anchors(d) - 1, 0)).toBe(closed ? 25_001 : 25_000)
+        expect(pieces.reduce((sum, d) => sum + anchors(d) - 1, 0)).toBe(closed ? 2 * MAX_PATH_SEGMENTS + 2 : 2 * MAX_PATH_SEGMENTS + 1)
         for (let i = 1; i < pieces.length; i++) expect(start(pieces[i])).toBe(ends(pieces[i - 1]))
         expect(start(pieces[0])).toBe(start(strandPath(line, smooth)))
         // A closed line comes back to its start; an open one ends at its last node.
@@ -44,8 +44,8 @@ describe('SVG export', () => {
   it('groups a split line’s pieces, so it selects as one line in Illustrator', () => {
     const svg = growthSvg([circle(83_143), circle(100)], [], { ...DEFAULTS, showBoundary: false })
     const group = /<g>\n((?:<path d="[^"]+"\/>\n)+)<\/g>/.exec(svg)
-    expect(group?.[1].match(/<path/g)).toHaveLength(9)
-    expect(svg.match(/<path/g)).toHaveLength(10)
+    expect(group?.[1].match(/<path/g)).toHaveLength(3)
+    expect(svg.match(/<path/g)).toHaveLength(4)
   })
 
   // A wavy closed line, so straight edges between its cuts pass both inside and outside it.
@@ -74,12 +74,12 @@ describe('SVG export', () => {
   }
 
   it('fills a closed line too long for one path exactly as the whole line would fill', () => {
-    const line = flower(25_001)
+    const line = flower(2 * MAX_PATH_SEGMENTS + 1)
     const whole = strandPath(line, false), fill = fillPath(line, false)
     const subpaths = fill.split('M').slice(1)
     expect(subpaths.length).toBeGreaterThan(3)
     for (const sub of subpaths) expect((sub.match(/L/g) ?? []).length).toBeLessThanOrEqual(MAX_PATH_SEGMENTS)
-    expect(fill.split('L').length - 1).toBeLessThan(25_001 + subpaths.length * 2) // every node once, plus the cuts
+    expect(fill.split('L').length - 1).toBeLessThan(2 * MAX_PATH_SEGMENTS + 1 + subpaths.length * 2) // every node once, plus the cuts
     const wholeSubs = subpathsOf(whole), fillSubs = subpathsOf(fill)
     let inside = 0
     for (let k = 0; k < 1500; k++) {
@@ -95,7 +95,7 @@ describe('SVG export', () => {
 
   it('puts the fill under the lines, for closed lines only, when Fill is on', () => {
     const open = { closed: false, points: new Float64Array([10, 10, 50, 50, 90, 10]) }
-    const lines = [flower(30_000), flower(200), open]
+    const lines = [flower(MAX_PATH_SEGMENTS + 1), flower(200), open]
     const off = growthSvg(lines, [], { ...DEFAULTS, showBoundary: false })
     expect(off).not.toContain('id="fill"')
     const on = growthSvg(lines, [], { ...DEFAULTS, showBoundary: false, fill: true, fillColor: '#b92d5d' })
