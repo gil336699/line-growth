@@ -1,5 +1,11 @@
 # Line Growth Changelog
 
+## 1.1.0 2026-11-08
+
+- **Max nodes sets how fine the lines are.** With Auto tune on, raise Max nodes above Auto tune's choice and Auto tune keeps your number and scales the segment length, repel radius, step size and line width to suit it: four times the nodes, lines half as far apart, with the same forces and look. Before, lines filled the shape at the panel's lengths and stopped, so a higher Max nodes did nothing. The default circle at 9,000 nodes now fills to 9,000 in 6.5 s, and Gil's pill with a hole at 20,000 fills to 17,637. It works while lines grow, and a new shape or start keeps your number. Lower than Auto tune's choice, Max nodes only caps the nodes, as before. Turning Auto tune off and on again hands Max nodes back to Auto tune.
+- **Detailed drawings grow freely.** Gil's Voronoi Studio export, packed too tightly at Auto tune's lengths, grows without the warning at 12,000 nodes. When lines are packed too tightly with Auto tune on, the status now suggests raising Max nodes.
+- **A new icon.** White coral inside a mint ring, like the app's own sheet and boundary, grown by Line Growth's engine. There's also an icon for adding the site to an iPhone or iPad home screen.
+
 ## 1.0.2 2026-11-08
 
 Fixes from three rounds of QA (functionality, UI/UX, and real use with Gil's files).
