@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Boundary } from './boundary'
 import { voronoiCells } from './cells'
-import { ellipseRing, signedArea, type Polygon, type Vec } from './geometry'
+import { centroid, ellipseRing, signedArea, type Polygon, type Vec } from './geometry'
 
 const square = (x0: number, y0: number, x1: number, y1: number): Polygon => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
 const toSegment = ([px, py]: Vec, [ax, ay]: Vec, [bx, by]: Vec) => {
@@ -18,6 +18,14 @@ const inside = (poly: Vec[], [x, y]: Vec) => {
   return c
 }
 const area = (cells: Vec[][]) => cells.reduce((sum, c) => sum + Math.abs(signedArea(c)), 0)
+const boxOfAll = (cells: Vec[][]) => cells.flat().reduce<[number, number, number, number]>(
+  ([a, b, c, d], [x, y]) => [Math.min(a, x), Math.min(b, y), Math.max(c, x), Math.max(d, y)], [Infinity, Infinity, -Infinity, -Infinity])
+// The middle of all the cells' area.
+const middleOf = (cells: Vec[][]): Vec => {
+  let a = 0, x = 0, y = 0
+  for (const c of cells) { const w = Math.abs(signedArea(c)), [cx, cy] = centroid(c); a += w; x += cx * w; y += cy * w }
+  return [x / a, y / a]
+}
 
 describe('Voronoi cells', () => {
   const sheet = new Boundary([square(5, 5, 195, 195)])
@@ -71,6 +79,36 @@ describe('Voronoi cells', () => {
     expect(area(cells) / area([round.rings[0]])).toBeGreaterThan(0.75)
   })
 
+  it('sit where Position puts them, against the boundary, with room to burst out the other way', () => {
+    const extent = (cells: Vec[][]) => boxOfAll(cells)
+    // In the square sheet, bottom left: flush with the left and bottom, 114 mm across, room at the top and right.
+    const half = (0.1 * Math.sqrt((114 * 114) / 30)) / 2
+    const [x0, y0, x1, y1] = extent(voronoiCells(sheet, { count: 30, size: 60, gap: 10, seed: 1, position: 'bottom-left' }))
+    expect(x0).toBeCloseTo(5 + half, 2); expect(y1).toBeCloseTo(195 - half, 2)
+    expect(x1).toBeLessThanOrEqual(5 + 114 - half + 1e-3); expect(y0).toBeGreaterThanOrEqual(195 - 114 + half - 1e-3)
+    // In a tall rectangle, the copy slides to the corner and then along the side, so it's flush with both.
+    const tall = new Boundary([square(0, 0, 210, 297)])
+    const t = extent(voronoiCells(tall, { count: 30, size: 60, gap: 10, seed: 1, position: 'bottom-left' }))
+    const th = (0.1 * Math.sqrt((126 * 178.2) / 30)) / 2
+    expect(t[0]).toBeCloseTo(th, 2); expect(t[3]).toBeCloseTo(297 - th, 2)
+    // Top right and right go the other way; the middle stays round the middle.
+    const tr = extent(voronoiCells(tall, { count: 30, size: 60, gap: 10, seed: 1, position: 'top-right' }))
+    expect(tr[2]).toBeCloseTo(210 - th, 2); expect(tr[1]).toBeCloseTo(th, 2)
+    const right = extent(voronoiCells(tall, { count: 30, size: 60, gap: 10, seed: 1, position: 'right' }))
+    expect(right[2]).toBeCloseTo(210 - th, 2); expect((right[1] + right[3]) / 2).toBeCloseTo(148.5, 0)
+    const mid = extent(voronoiCells(tall, { count: 30, size: 60, gap: 10, seed: 1 }))
+    expect((mid[0] + mid[2]) / 2).toBeCloseTo(105, 0); expect((mid[1] + mid[3]) / 2).toBeCloseTo(148.5, 0)
+    // In a circle, bottom left touches the circle's edge at the bottom left, rather than its box's corner.
+    const round = new Boundary([ellipseRing(100, 100, 95, 95, 0.05)])
+    const cells = voronoiCells(round, { count: 20, size: 40, gap: 10, seed: 4, position: 'bottom-left' })
+    expect(cells).toHaveLength(20)
+    const [cx, cy] = middleOf(cells)
+    // The copy's radius is 38 mm; touching at 225°, its middle is 95 - 38 = 57 mm from the circle's, down and left.
+    expect(Math.hypot(cx - 100, cy - 100)).toBeCloseTo(57, -0.5)
+    expect(cx).toBeLessThan(65); expect(cy).toBeGreaterThan(135)
+    for (const c of cells) for (const [x, y] of c) expect(round.contains(x, y)).toBe(true)
+  })
+
   it('fill an outline with a hole, going round it', () => {
     // A 40 mm hole in the middle of a 200 mm square. One cell would hold the hole whole, so it's cut in two.
     const holed = new Boundary([square(0, 0, 200, 200), square(80, 80, 120, 120)])
@@ -85,6 +123,18 @@ describe('Voronoi cells', () => {
       // The gap is a share of a cell's width, so one big cell is set in a long way.
       expect(area(cells) / (200 * 200 - 40 * 40)).toBeGreaterThan(count === 1 ? 0.6 : 0.75)
     }
+  })
+
+  it('leave the outline’s own holes out of a smaller area, with no smaller copies of them', () => {
+    // A hole near the top-left corner; a 60 % copy of the outline round the middle would have held a 24 mm copy of
+    // it at 52–76 mm, where there's no hole.
+    const holed = new Boundary([square(0, 0, 200, 200), square(20, 20, 60, 60)])
+    const cells = voronoiCells(holed, { count: 30, size: 60, gap: 10, seed: 6 })
+    let covered = 0, tried = 0
+    for (let x = 54; x <= 74; x += 2) for (let y = 54; y <= 74; y += 2) { tried++; if (cells.some(c => inside(c, [x, y]))) covered++ }
+    expect(covered / tried).toBeGreaterThan(0.6)
+    // The real hole stays out.
+    for (const c of cells) for (const [x, y] of c) expect(holed.contains(x, y)).toBe(true)
   })
 
   it('make a cell the outline cuts in two into two lines', () => {

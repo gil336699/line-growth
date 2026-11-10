@@ -43,6 +43,24 @@ export function Segmented<T extends string>({ label, options, value, onChange, u
   </div>
 }
 
+// Nine points in a 3 × 3 grid, like Illustrator's reference point: which side or corner something sits against.
+// Options run row by row from the top left.
+export function AnchorField<T extends string>({ label, options, value, onChange, tip, unavailable }: Tip & {
+  label: string; options: Option<T>[]; value: T; onChange: (value: T) => void
+}) {
+  const id = useId()
+  return <div className="anchor-row" data-tip={unavailable || tip}>
+    <span id={id} className={unavailable ? 'off' : undefined}>{label}</span>
+    <div className="anchor-grid" role="group" aria-labelledby={id}>
+      {options.map(option => {
+        const off = unavailable || option.unavailable
+        return <button key={option.value} type="button" aria-label={option.label} aria-pressed={option.value === value}
+          aria-disabled={off ? true : undefined} data-tip={off || option.tip} onClick={() => { if (!off) onChange(option.value) }} />
+      })}
+    </div>
+  </div>
+}
+
 export function SliderField({ label, value, min, max, step = 1, onChange, format, tip, unavailable, log }: Tip & {
   label: string; value: number; min: number; max: number; step?: number; onChange: (value: number) => void
   format?: (value: number) => string; log?: boolean

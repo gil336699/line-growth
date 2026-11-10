@@ -26,7 +26,7 @@ export const clearance = (b: Boundary, x: number, y: number) => { const [px, py]
 // sizePct: the shape's diameter or length as a percentage of the boundary's smaller side. For Outline it is
 // how far in from the edge, as a percentage of half the smaller side. Cells take their own count, size and gap.
 export function startPaths(kind: StartShape, b: Boundary, sizePct: number, count: number, seed: number,
-  cells: Omit<CellOptions, 'seed'> = { count: 30, size: 100, gap: 10 }): Path[] {
+  cells: Omit<CellOptions, 'seed'> = { count: 30, size: 100, gap: 10, position: 'center' }): Path[] {
   if (b.empty || kind === 'custom') return []
   if (kind === 'cells') return voronoiCells(b, { ...cells, seed }).map(points => ({ closed: true, points }))
   const [x0, y0, x1, y1] = b.box

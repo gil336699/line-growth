@@ -5,17 +5,27 @@
 //
 // The cells fill any outline, holes included, as Voronoi Studio's do: Clipper2 clips each cell to it. A cell the
 // outline cuts in two becomes two lines. A cell with a hole wholly inside it is cut in two through the hole first,
-// since one line can't go round a hole and also hold it out. Below 100 %, Size fills a smaller copy of the outline
-// round its middle, which leaves room for the cells to burst out of it, up to the boundary.
+// since one line can't go round a hole and also hold it out. Below 100 %, Size fills a smaller copy of the outline,
+// which leaves room for the cells to burst out of it, up to the boundary. Position puts the copy in the middle or
+// against a side or corner of the outline, so the cells burst out only the other way.
 import { EndType, FillRule, inflatePathsD, intersectD, JoinType, rectClip, unionD, type PathsD } from 'clipper2-ts'
-import type { Boundary } from './boundary'
+import { Boundary } from './boundary'
 import { centroid, signedArea, type Box, type Polygon, type Vec } from './geometry'
+
+export type CellPosition = 'top-left' | 'top' | 'top-right' | 'left' | 'center' | 'right' | 'bottom-left' | 'bottom' | 'bottom-right'
+export const CELL_POSITIONS: CellPosition[] = ['top-left', 'top', 'top-right', 'left', 'center', 'right', 'bottom-left', 'bottom', 'bottom-right']
+// Which way each position moves the copy: x to the right, y down the page.
+const TOWARD: Record<CellPosition, [number, number]> = {
+  'top-left': [-1, -1], top: [0, -1], 'top-right': [1, -1], left: [-1, 0], center: [0, 0], right: [1, 0],
+  'bottom-left': [-1, 1], bottom: [0, 1], 'bottom-right': [1, 1],
+}
 
 export type CellOptions = {
   count: number // how many cells
-  size: number // percent: the area the cells fill, as a share of the outline's size, round its middle
+  size: number // percent: the area the cells fill, as a share of the outline's size
   gap: number // percent: how far apart neighbours start, as a share of a cell's width
   seed: number
+  position?: CellPosition // where a smaller area sits; the middle unless given
 }
 
 export const RELAX_ROUNDS = 2 // even enough to read as cells, still uneven enough to look grown
@@ -136,6 +146,31 @@ function aroundHoles(cell: Vec[], holes: Polygon[], half: number): Vec[][] {
   return parts
 }
 
+// Moves a smaller copy of the outline toward a side or corner until it meets the outline: first straight toward the
+// corner, then along each side, so in a rectangle it ends flush with both sides and in a circle it touches the
+// circle's edge at the corner's angle. Each move goes as far as the copy's points stay inside the outline's outer
+// rings, at least as many of them as before the move, which keeps a copy that pokes out of a concave outline in
+// the middle from sliding away. Up to SLIDE_POINTS of the copy's points are tested: the area is clipped to the
+// outline afterwards, so a copy that strays out between them by a hair is trimmed. On a 4,096-point circle, 200
+// cells at the bottom left took 248 ms testing every point.
+const SLIDE_POINTS = 512
+function slide(copy: Polygon[], outers: Polygon[], [ax, ay]: [number, number], reach: number): Polygon[] {
+  const inside = new Boundary(outers)
+  const all = copy.flat(), every = Math.max(1, Math.ceil(all.length / SLIDE_POINTS))
+  const points = all.filter((_, i) => i % every === 0)
+  const share = (dx: number, dy: number) => { let n = 0; for (const [x, y] of points) if (inside.contains(x + dx, y + dy)) n++; return n / points.length }
+  const kept = share(0, 0)
+  let ox = 0, oy = 0
+  for (const [dx, dy] of ax && ay ? [[ax, ay], [ax, 0], [0, ay]] : [[ax, ay]]) {
+    const l = Math.hypot(dx, dy), ux = dx / l, uy = dy / l
+    // 24 halvings bring the reach of a 5 m sheet down to 0.3 µm.
+    let lo = 0, hi = reach
+    for (let i = 0; i < 24; i++) { const mid = (lo + hi) / 2; if (share(ox + ux * mid, oy + uy * mid) >= kept) lo = mid; else hi = mid }
+    ox += ux * lo; oy += uy * lo
+  }
+  return copy.map(r => r.map(([x, y]): Vec => [x + ox, y + oy]))
+}
+
 export function voronoiCells(b: Boundary, o: CellOptions): Vec[][] {
   if (b.empty) return []
   // The outline as Clipper keeps it: outer rings positive, holes negative.
@@ -144,10 +179,16 @@ export function voronoiCells(b: Boundary, o: CellOptions): Vec[][] {
   const [bx0, by0, bx1, by1] = boxOfRings(outline)
   const k = Math.max(0.01, Math.min(1, o.size / 100))
   const mx = (bx0 + bx1) / 2, my = (by0 + by1) / 2
-  // A smaller area is the outline scaled round its middle, and kept within the outline itself.
-  const area0 = k < 1
-    ? fromPaths(intersectD(toPaths(outline.map(r => r.map(([x, y]): Vec => [mx + (x - mx) * k, my + (y - my) * k]))), toPaths(outline), FillRule.NonZero, PRECISION))
-    : outline
+  // A smaller area is the outline's outer shape scaled round its middle, moved where Position puts it, and kept
+  // within the outline itself, so it leaves out the outline's own holes and no smaller copies of them.
+  let area0 = outline
+  if (k < 1) {
+    const outers = outline.filter(r => signedArea(r) > 0)
+    let copy = outers.map(r => r.map(([x, y]): Vec => [mx + (x - mx) * k, my + (y - my) * k]))
+    const toward = TOWARD[o.position ?? 'center'] ?? [0, 0]
+    if (toward[0] || toward[1]) copy = slide(copy, outers, toward, Math.max(bx1 - bx0, by1 - by0))
+    area0 = fromPaths(intersectD(toPaths(copy), toPaths(outline), FillRule.NonZero, PRECISION))
+  }
   const size = area0.reduce((sum, r) => sum + signedArea(r), 0)
   if (!(size > 0)) return []
   const count = Math.max(1, Math.min(500, Math.round(o.count)))

@@ -41,8 +41,8 @@ export function startOf(d: Pick<Design, 'settings' | 'imported' | 'custom'>): Pa
   const s = d.settings
   if (s.start === 'custom') return d.custom
   const b = boundaryOfDesign(d)
-  const cells = { count: s.cellCount, size: s.cellSize, gap: s.cellGap }
-  const key = s.start === 'cells' ? `cells|${cells.count}|${cells.size}|${cells.gap}|${s.seed}` : `${s.start}|${s.startSize}|${s.startCount}|${s.start === 'circles' ? s.seed : 0}`
+  const cells = { count: s.cellCount, size: s.cellSize, gap: s.cellGap, position: s.cellPosition }
+  const key = s.start === 'cells' ? `cells|${cells.count}|${cells.size}|${cells.gap}|${cells.position}|${s.seed}` : `${s.start}|${s.startSize}|${s.startCount}|${s.start === 'circles' ? s.seed : 0}`
   if (startCache && startCache.key === key && startCache.boundary === b) return startCache.paths
   const paths = startPaths(s.start, b, s.startSize, s.startCount, s.seed, cells)
   startCache = { key, boundary: b, paths }
@@ -128,7 +128,7 @@ export const lineLength = (strands: Strand[]) => strands.reduce((sum, s) => {
 // ---------- What a change does ----------
 
 const SHEET = ['width', 'height', 'margin'] as const
-const START = ['start', 'startSize', 'startCount', 'cellCount', 'cellSize', 'cellGap'] as const
+const START = ['start', 'startSize', 'startCount', 'cellCount', 'cellSize', 'cellGap', 'cellPosition'] as const
 // Starts the seed places, so a new seed makes a new start.
 const SEEDED = ['circles', 'cells']
 

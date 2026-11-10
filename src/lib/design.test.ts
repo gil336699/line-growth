@@ -159,9 +159,9 @@ describe('the Cells start', () => {
     expect(nodeCount(g.state)).toBeGreaterThan(nodeCount(many.state) * 1.5)
   })
 
-  it('starts again for a new count, size, gap or seed, while new colours keep the lines', () => {
+  it('starts again for a new count, size, gap, position or seed, while new colours keep the lines', () => {
     const grown = grow(freshDesign(cells), 20)
-    for (const patch of [{ cellCount: 12 }, { cellSize: 70 }, { cellGap: 30 }, { seed: 5 }]) {
+    for (const patch of [{ cellCount: 12 }, { cellSize: 70 }, { cellGap: 30 }, { cellPosition: 'bottom-left' as const }, { seed: 5 }]) {
       const next = planChange(grown, patch)
       expect(next.discards).toBe(true)
       expect(next.design.state.step).toBe(0)
@@ -175,13 +175,15 @@ describe('the Cells start', () => {
   })
 
   it('reopens from a project file with its cells and colours, and old files open in one colour', () => {
-    const d = grow(freshDesign(sanitizeSettings({ ...cells, colors: 'gradient', gradient: 'custom', gradientFrom: '#112233', gradientTo: '#ddeeff', cellCount: 18 })), 40)
+    const d = grow(freshDesign(sanitizeSettings({ ...cells, colors: 'gradient', gradient: 'custom', gradientFrom: '#112233', gradientTo: '#ddeeff', cellCount: 18, cellSize: 60, cellPosition: 'top-right' })), 40)
     const back = parseProject(serializeProject(d))
     expect(back.settings).toEqual(d.settings)
     expect(startOf(back)).toEqual(startOf(d))
     expect(lineColors(back.settings, startOf(back), back.state.strands.length)).toEqual(lineColors(d.settings, startOf(d), d.state.strands.length))
     const old = parseProject('{"schema":"line-growth/project","version":1,"settings":{"fill":true,"fillColor":"#ff0000"}}')
     expect(old.settings.colors).toBe('one')
+    expect(old.settings.cellPosition).toBe('center')
+    expect(parseProject('{"schema":"line-growth/project","version":1,"settings":{"cellPosition":"upstairs"}}').settings.cellPosition).toBe('center')
     expect(old.settings.start).toBe(DEFAULTS.start)
   })
 })

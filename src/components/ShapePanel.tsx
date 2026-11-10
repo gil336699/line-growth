@@ -1,10 +1,11 @@
 import { memo } from 'react'
+import type { CellPosition } from '../growth/cells'
 import type { StartShape } from '../growth/seeds'
 import type { Imported } from '../lib/design'
 import { matchPreset, presetSize, SHEET_PRESETS } from '../lib/presets'
 import { LIMITS, marginMax, type BoundaryShape, type Settings } from '../lib/settings'
 import { formatLength, pixelSize, type Units } from '../lib/units'
-import { Button, LengthField, NumberField, RangeField, Section, Segmented, type Option } from './Controls'
+import { AnchorField, Button, LengthField, NumberField, RangeField, Section, Segmented, type Option } from './Controls'
 import type { Change } from './GrowPanel'
 import { Icon } from './Icon'
 
@@ -27,6 +28,19 @@ const STARTS: Option<StartShape>[] = [
   { value: 'outline', label: 'Outline', tip: 'Start from a copy of the boundary, set in from the edge, which grows inward.' },
   { value: 'custom', label: 'Drawn', tip: 'The lines you drew with the Draw tool or imported from an SVG.' },
 ]
+// Where a smaller area of cells sits, and so which way they burst out of it.
+const POSITIONS: Option<CellPosition>[] = ([
+  ['top-left', 'Top left', 'in the top-left corner', 'down and to the right'],
+  ['top', 'Top', 'along the top', 'down and to both sides'],
+  ['top-right', 'Top right', 'in the top-right corner', 'down and to the left'],
+  ['left', 'Left', 'along the left side', 'to the right, up and down'],
+  ['center', 'Middle', 'in the middle', 'on every side'],
+  ['right', 'Right', 'along the right side', 'to the left, up and down'],
+  ['bottom-left', 'Bottom left', 'in the bottom-left corner', 'up and to the right'],
+  ['bottom', 'Bottom', 'along the bottom', 'up and to both sides'],
+  ['bottom-right', 'Bottom right', 'in the bottom-right corner', 'up and to the left'],
+] as const).map(([value, label, where, toward]) => ({ value, label, tip: `${label}: the cells start ${where} of the boundary and burst out ${toward}.` }))
+
 const ASSUMED = {
   css: 'The file doesn’t say how big it is, so it was read at 96 units per inch, the web standard. Check the width and height.',
   illustrator: 'The file doesn’t say how big it is. It looks like it came from Illustrator, so it was read at 72 points per inch, as Illustrator writes it.',
@@ -102,8 +116,12 @@ export const ShapePanel = memo(function ShapePanel({ s, imported, customCount, c
         <RangeField label="Count" value={s.cellCount} min={LIMITS.cellCount[0]} max={LIMITS.cellCount[1]} step={1} digits={0}
           tip="How many cells to start from. Auto tune makes the lines finer for smaller cells, with more nodes." onChange={cellCount => change({ cellCount: Math.round(cellCount) }, 'cellCount')} />
         <RangeField label="Size" value={s.cellSize} min={LIMITS.cellSize[0]} max={LIMITS.cellSize[1]} step={1} digits={0} suffix="%"
-          tip="How much of the boundary the cells fill. At 100 % they fill it to the edge; below, they fill a smaller copy round its middle and can burst out of it, up to the boundary."
+          tip="How much of the boundary the cells fill. At 100 % they fill it to the edge; below, they fill a smaller copy of it, placed by Position, and can burst out of it, up to the boundary."
           onChange={cellSize => change({ cellSize: Math.round(cellSize) }, 'cellSize')} />
+        <AnchorField label="Position" options={POSITIONS} value={s.cellPosition}
+          tip="Where the cells start when they fill less than the whole boundary. Against a side or corner, they burst out only the other way."
+          unavailable={s.cellSize >= 100 && 'At 100 % the cells fill the whole boundary. Lower Size to place them.'}
+          onChange={cellPosition => change({ cellPosition }, 'cellPosition')} />
         <RangeField label="Gap" value={s.cellGap} min={LIMITS.cellGap[0]} max={LIMITS.cellGap[1]} step={1} digits={0} suffix="%"
           tip="How far apart neighbouring cells start, as a share of a cell’s width, so they have room to fold into each other."
           onChange={cellGap => change({ cellGap: Math.round(cellGap) }, 'cellGap')} />

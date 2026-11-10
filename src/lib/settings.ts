@@ -1,5 +1,6 @@
 // Every setting of a design, its default, and the range it may take. Lengths are millimetres.
 import { SIM_RANGE, SIM_SPAN } from '../growth/autotune'
+import { CELL_POSITIONS, type CellPosition } from '../growth/cells'
 import type { StartShape } from '../growth/seeds'
 import type { Units } from './units'
 
@@ -14,7 +15,7 @@ export type Settings = {
   shape: BoundaryShape; margin: number
   // Start. The Cells start has its own count, and its size and gap in percent (see growth/cells.ts).
   start: StartShape; startSize: number; startCount: number
-  cellCount: number; cellSize: number; cellGap: number
+  cellCount: number; cellSize: number; cellGap: number; cellPosition: CellPosition
   // Growth. autoNodes: Auto tune picks Max nodes too; once Max nodes is set by hand, Auto tune keeps it and
   // scales the lengths to suit it.
   autoTune: boolean; autoNodes: boolean
@@ -35,7 +36,7 @@ export const DEFAULTS: Settings = {
   units: 'mm', width: 200, height: 200, dpi: 300,
   shape: 'ellipse', margin: 5,
   start: 'circle', startSize: 15, startCount: 5,
-  cellCount: 30, cellSize: 100, cellGap: 10,
+  cellCount: 30, cellSize: 100, cellGap: 10, cellPosition: 'center',
   autoTune: true, autoNodes: true,
   // Auto tune replaces these for the default sheet; they are what it picks for a 200 mm circle.
   maxNodes: 2160, stepsPerFrame: 2, segmentLength: 2.78, repelRadius: 7.22, repulsion: 1.07, alignment: 0.49, attraction: 0.47, stepSize: 0.25,
@@ -67,6 +68,7 @@ const CHOICES = {
   units: ['mm', 'in', 'pt', 'px'],
   shape: ['rect', 'ellipse', 'imported'],
   start: ['circle', 'line', 'circles', 'cells', 'outline', 'custom'],
+  cellPosition: CELL_POSITIONS,
   colors: ['one', 'gradient'],
   gradient: ['rainbow', 'sunset', 'ocean', 'viridis', 'custom'],
 } as const
