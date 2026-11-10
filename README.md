@@ -1,12 +1,14 @@
 # Line Growth
 
-Line Growth is a browser app for differential line growth: a line that keeps lengthening, folding and pushing itself apart until it fills a shape with organic, brain-coral and fingerprint patterns. Pick a boundary, or import one from Illustrator, start from a circle, a line or lines you draw, and change the forces while it grows. Export the result at real size as SVG or DXF for Illustrator, plotters and lasers, or as a PNG. It rebuilds Gil's Differential Growth panel for Illustrator as a web app.
+Line Growth is a browser app for differential line growth: a line that keeps lengthening, folding and pushing itself apart until it fills a shape with organic, brain-coral and fingerprint patterns. Pick a boundary, or import one from Illustrator, start from a circle, a line, Voronoi cells or lines you draw, and change the forces while it grows. Give each line its own colour from a gradient, and each cell grows into a coloured piece of its own. Export the result at real size as SVG or DXF for Illustrator, plotters and lasers, or as a PNG. It rebuilds Gil's Differential Growth panel for Illustrator as a web app.
 
 **Use it online:** https://gil336699.github.io/line-growth/
 
 ![Line Growth in use: a circle grows and folds to fill a 200 mm disc while a wavy line and a small circle are drawn beside it and grow too, never crossing, an Illustrator SVG with a hole is dropped in and its two start lines fill the shape around the hole, and the result is exported as a real-size SVG.](docs/demo.gif)
 
 [Watch the demo as a video](https://github.com/gil336699/line-growth/releases/download/v1.0.2/line-growth-demo.mp4) (MP4, 1920 × 1200, 25 seconds).
+
+![Coloured cells: 30 Voronoi cells fill a 200 mm disc in a rainbow from purple on the left to red on the right, and the same cells grown into branching pieces that pack the disc, each keeping its colour.](docs/cells.jpg)
 
 Everything runs in your browser. Files you open and the lines you grow stay on your computer.
 
@@ -42,9 +44,10 @@ Every control describes itself on hover or keyboard focus, with its shortcut. Un
 ## Workflow
 
 1. **Grow.** Press **Grow** or Space. The default circle fills a 200 mm disc in a few seconds. Change any force while it grows; Pause when you like the look.
-2. **Shape.** Choose a sheet size, a Rectangle or Ellipse boundary and a margin, or press **Import SVG…** (or drop an SVG on the window). Pick a start: Circle, Line, Circles, Outline, or Drawn lines.
-3. **Draw.** Drag on the sheet to draw a line to grow, end where you began to close it, or click between lines for a small circle. A drawn line stops where it meets another, and a circle shrinks to fit, so drawing never makes lines cross. Erase removes a line. Both work while lines grow.
-4. **Export.** **SVG** and **DXF** are real size for Illustrator, plotters and lasers. **PNG** is an image at the sheet's pixels per inch. **Save** writes a `.linegrowth.json` project you can reopen and keep growing.
+2. **Shape.** Choose a sheet size, a Rectangle or Ellipse boundary and a margin, or press **Import SVG…** (or drop an SVG on the window). Pick a start: Circle, Line, Circles, Cells, Outline, or Drawn lines. **Cells** fills the boundary with Voronoi cells, each a closed line that grows into its own piece; **Colour the cells** fills each one in its own colour from a rainbow.
+3. **Style.** Choose **Colours: Gradient** on the Style tab to give each line its own colour, by where it starts: Rainbow, Sunset, Ocean, Viridis or your two colours, in any direction. With Fill on, each closed line is filled in its own colour too.
+4. **Draw.** Drag on the sheet to draw a line to grow, end where you began to close it, or click between lines for a small circle. A drawn line stops where it meets another, and a circle shrinks to fit, so drawing never makes lines cross. Erase removes a line. Both work while lines grow.
+5. **Export.** **SVG** and **DXF** are real size for Illustrator, plotters and lasers. **PNG** is an image at the sheet's pixels per inch. **Save** writes a `.linegrowth.json` project you can reopen and keep growing.
 
 ### Working with Illustrator
 
@@ -71,6 +74,7 @@ Pictures have no lines to grow. When Illustrator can't write a shape's look as S
 | Circle | A circle in the roomiest part of the boundary, so a hole in the middle is avoided. |
 | Line | A straight line across the middle. |
 | Circles | Several circles scattered by the seed. |
+| Cells | Voronoi cells that fill the boundary, holes and all, each a closed line. Count sets how many, Gap how far apart neighbours start (a share of a cell's width). Size below 100 % fills a smaller copy of the outline round its middle, so cells can burst out of it, up to the boundary. The seed places them. |
 | Outline | A copy of each boundary ring set in from the edge, which grows inward and outward from the holes. |
 | Drawn | Lines you drew or imported. Drawing on any start turns it into Drawn lines. |
 
@@ -80,9 +84,9 @@ Every export holds what the view shows: the lines, plus the boundary and the nod
 
 | Export | Contents | Units |
 | --- | --- | --- |
-| SVG | One path per line, as smooth curves through every node (or straight segments with Smooth curves off), stroked at the line width. A line of more than 32,000 nodes is a group of paths of up to 32,000 that meet end to end. With Fill on, group `fill`, under the lines, holds one filled shape per closed line. The boundary is a solid mint path in group `boundary`; nodes are dots in group `nodes`. No background. | mm, in, pt or px, as the sheet's units |
-| DXF | AutoCAD R12 text. One polyline per line on layer `LINES` (past 32,000 nodes, polylines that meet end to end), the boundary on `BOUNDARY`, nodes as points on `NODES`. | mm, or in for inch sheets |
-| PNG | The design at the sheet's pixels per inch, with the fill when it's on, optionally with a transparent background. | px |
+| SVG | One path per line, as smooth curves through every node (or straight segments with Smooth curves off), stroked at the line width. A line of more than 32,000 nodes is a group of paths of up to 32,000 that meet end to end. With Fill on, group `fill`, under the lines, holds one filled shape per closed line. With Colours set to Gradient, each line's path (or the group of its pieces) has its own stroke colour, and each fill its own fill colour. The boundary is a solid mint path in group `boundary`; nodes are dots in group `nodes`. No background. | mm, in, pt or px, as the sheet's units |
+| DXF | AutoCAD R12 text. One polyline per line on layer `LINES` (past 32,000 nodes, polylines that meet end to end), the boundary on `BOUNDARY`, nodes as points on `NODES`. Lines only, without colours or fill. | mm, or in for inch sheets |
+| PNG | The design at the sheet's pixels per inch, in its colours, with the fill when it's on, optionally with a transparent background. | px |
 | Project | Settings, the imported boundary, the start lines and every grown node, as `.linegrowth.json` (schema `line-growth/project`, version 1). | mm |
 
 ## Controls
@@ -103,8 +107,11 @@ Every export holds what the view shows: the lines, plus the boundary and the nod
 | Preset, Units, Width, Height | Sheet size. Units are mm, in, pt or px; switching converts the numbers. Grown lines stretch with the sheet. |
 | Margin | Gap between the sheet edge and a Rectangle or Ellipse boundary. |
 | Start from, Size, Count | The start lines, their size as a share of the boundary, and the number of circles. |
+| Count, Size, Gap (Cells) | How many cells, how much of the boundary they fill (10–100 %), and how far apart neighbours start (0–50 % of a cell's width). |
 | Line width, colours | Line width and colour, and the sheet colour for the preview and PNG. |
-| Fill | Fills the inside of each closed line with the fill colour, for a two-tone pattern. Open lines have no inside, so they stay lines. In the preview, SVG and PNG; DXF holds the lines only. |
+| Colours | One colour for every line, or Gradient: each line, its fill and its nodes take the gradient's colour at the middle of where the line started, so a line keeps its colour as it grows. The gradient runs from the line furthest back along the direction to the one furthest forward. |
+| Gradient, Direction | Rainbow, Sunset, Ocean, Viridis, or your two colours (From and To); Direction 0° runs left to right, 90° top to bottom. |
+| Fill | Fills the inside of each closed line with the fill colour, or with each line's own colour when Colours is Gradient. Open lines have no inside, so they stay lines. In the preview, SVG and PNG; DXF holds the lines only. |
 | Boundary, Nodes | Show the boundary guide and the nodes, in the view and in exports. |
 | Smooth curves | SVG lines as curves through the nodes, or straight segments. |
 
@@ -145,6 +152,8 @@ What's new in the engine:
 - **Randomness** nudges each new node sideways by up to randomness × a quarter of its edge, using a hash of the seed, step and node, so even shapes break into organic folds and every run is repeatable. The nudge is part of the node's first move, so it is checked for crossings too.
 - **Determinism.** The same lines, settings and step count always give the same result, bit for bit. A test checks that a run saved half way, reopened and continued ends exactly where an uninterrupted run does, and another checks the engine against a copy of the panel's step.
 
+**Cells.** The seed scatters a point for each cell inside the outline, two rounds of Lloyd's relaxation move each point to the middle of its cell, and each cell is the part of the outline nearer its own point than any other. [Clipper2](https://github.com/PolyClipping/Clipper2) clips each cell to the outline, as in Voronoi Studio, so the cells fill a circle, a rectangle or any imported shape to its edges. Each cell is set in by half the gap from its neighbours and from the outline. A cell the outline cuts in two becomes two lines, and a cell with a hole wholly inside it is first cut in two through the hole, since one line can't go round a hole and hold it out. Auto tune tunes the cells as one cell's line: tuned on all of them together, the panel's rules picked a 6.7 mm segment length for the default circle, so long that 30 cells grew from 361 nodes to 492 and stopped. Small cells are tuned finer, at least 7 segment lengths across, with more nodes to keep the look.
+
 **Limits of the method.** Some settings are unstable: a repel radius of more than about five segment lengths (for example after halving only the segment length) packs so many nodes within reach that their pushes overwhelm the step, and lines judder in place, held back from crossing. The status warns when that happens. Scale the segment length, repel radius and step size together, or turn on Auto tune. Lines that cross in an imported drawing keep growing, but the check can't uncross them, so they may stay crossed. Lines that touch at the start, such as Voronoi edges meeting at a corner, would be held still where they touch, so before growth begins a closed line that touches another is set in by a quarter of the segment length, and an open line's touching end is drawn back by as much. A drawing with many short lines, such as a Voronoi export, can be packed closer than Auto tune's lengths suit; the status says so, and a higher Max nodes makes the lines finer, with room to move. Nodes are only added, never removed, so a line can't shorten. The boundary and imported curves are short straight segments, within 0.02 mm of the drawn curve. Auto tune's own choice follows the panel's rules, made for a node cap of 2,600; a higher Max nodes gives larger or more detailed designs finer lines. Lines that fill a shape use roughly its area divided by the square of the segment length, so the fill can land a little under Max nodes: Gil's pill with a hole filled at 17,637 of 20,000.
 
 ## Known limits
@@ -166,6 +175,8 @@ The crossing check costs about 10 % in ordinary growth. When settings are out of
 - PNG export is limited to 16,384 px a side and 120 megapixels, which browsers can draw. Use SVG for larger work.
 - The live design is kept in the browser's local storage, every 5 seconds while lines grow and whenever the page is hidden or closed. Local storage holds about 5 MB. Designs above roughly 100,000 nodes may not fit, so save a project file to keep work.
 - Browsers slow a hidden tab's timers, even a worker's, to a few a second. Growth catches up by running longer batches, so it keeps going at about 90 steps per second at the default size in a background tab, but Pause can then take up to a quarter of a second.
+- The Cells start takes 15 ms for 30 cells in the default circle and 60 ms for 200, and 109 ms for 200 in a 4,096-point outline (Node). 30 cells in the default circle grow from 917 nodes to 2,160 in under a second, at 120 steps/s in the app.
+- Colours follow the start lines. Cells are made the same way for the same settings, so a reopened project keeps its colours; a project whose grown lines don't match its start lines, made by hand or by a different version, gives the extra lines the gradient's middle colour.
 - Frame rate in the browser wasn't measured, as the preview pane wasn't on screen during the long runs.
 
 ## Development
@@ -183,8 +194,8 @@ src/
   App.tsx              layout, files, import and export, shortcuts
   useGrowth.ts         the design, undo history and the growth worker
   components/          panels, bars, stage, tooltip layer, dialogs
-  growth/              the engine: growth step, boundary, start shapes, auto tune, geometry
-  lib/                 settings, units, design rules, drawing by hand, project files, SVG import, SVG, DXF and PNG export
+  growth/              the engine: growth step, boundary, start shapes, Voronoi cells, auto tune, geometry
+  lib/                 settings, units, design rules, line colours, drawing by hand, project files, SVG import, SVG, DXF and PNG export
   worker/              the growth worker and its messages
 docs/                  the demo GIF
 test-fixtures/         small SVGs the tests use, including Gil's pill outlines
@@ -195,7 +206,7 @@ The engine is plain TypeScript with no React, and every module has tests beside 
 
 ## Credits
 
-Rebuilt from Gil's Differential Growth panel for Adobe Illustrator. The UI components and SVG reader come from [Voronoi Studio](https://github.com/gil336699/voronoi-studio), and the worker pattern from [Growth Studio](https://github.com/gil336699/growth-studio).
+Rebuilt from Gil's Differential Growth panel for Adobe Illustrator. The UI components and SVG reader come from [Voronoi Studio](https://github.com/gil336699/voronoi-studio), and the worker pattern from [Growth Studio](https://github.com/gil336699/growth-studio). The Cells start clips cells with [clipper2-ts](https://github.com/countertype/clipper2-ts), a port of Angus Johnson's Clipper2 (Boost Software License 1.0). The Viridis gradient is the colour map by Stéfan van der Walt and Nathaniel Smith (CC0).
 
 ## License
 
