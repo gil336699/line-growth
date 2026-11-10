@@ -1,5 +1,14 @@
 # Line Growth Changelog
 
+## 1.4.1 2026-11-10
+
+Fixes from three rounds of QA, the third of them real design jobs in the released app: a coronal-section figure from Illustrator with fine folds in the cortex, a laser-engraved 100 mm coaster, and an A5 pen-plotter print with a PNG to post.
+
+- **The Outline start fits any outline.** It's now the boundary set in from every edge, holes and all, as an offset path is, so its lines never cross the boundary, a hole or each other. Before, each point moved in on its own. In the coronal section, with a narrow fissure and two close ventricles, points either side of the fissure landed up to 31 mm apart, and the lines round the ventricles overlapped the outline's: 5 crossings of the boundary and holes, 195 of each other. Growth was held back from the first step: "packed too tightly" for all of 150 s, jagged lines, 6,985 nodes, and lines through the ventricles. Now it's one clean line that fills the section in 4.8 s, with no crossings.
+- **Fill keeps holes clear.** A closed line that goes round a hole in the boundary, like a ventricle, filled over the hole too. The preview, PNG and SVG now leave holes empty. In SVG each hole is cut out of the fill's compound path, so the fill stays one shape to recolour in Illustrator.
+- **Hidden layers stay out.** Paths hidden by a class in the file's style sheet (`.st1{display:none}`), as SVG saved from Illustrator writes them, were imported and grew: a figure's hidden leader lines became 2 lines to grow, and 2 more were left out as outside. Elements hidden by a class, a style or an attribute are now left out, as Illustrator doesn't draw them.
+- **PNGs place at real size.** A PNG now records its pixels per inch. Without it, Illustrator, InDesign and Photoshop read 72 pixels per inch, so the coaster at 300 ppi placed at 417 mm instead of 100 mm, and the figure at 833 × 708 mm instead of 200 × 170 mm.
+
 ## 1.4.0 2026-11-09
 
 - **Position for cells.** A grid of nine points under Size, like Illustrator's reference point, puts a smaller area of cells in the middle or against a side or corner of the boundary, so the cells burst out only the other way. Bottom left gives Gil's sketch: cells packed against the left and bottom, bursting out at the top and right. In a rectangle the area sits flush with both sides; in a circle it touches the edge at the corner's angle. At Size 100 % the cells fill the whole boundary, so Position is unavailable and says why. Before, a smaller area always sat in the middle, so cells burst out on every side.
