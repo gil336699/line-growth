@@ -1,5 +1,10 @@
 # Line Growth Changelog
 
+## 1.4.2 2026-11-10
+
+- **Lining up in Illustrator, said right.** An export pasted in place lands on the figure it came from: open the SVG in Illustrator, select all, copy, and choose Edit › Paste in Place in your file. Checked in Illustrator 2026 with a coronal-section figure, it landed on the figure's outline within 0.01 mm. File › Place doesn't line it up: it brings the drawing in sized to its own lines, not the page, so placing it at the artboard's corner, as the File tab said, put it 7 mm right and 9.5 mm down. The File tab and README now say to paste in place.
+- **Checked in Illustrator 2026.** Save a Copy as SVG writes a hidden layer as `class="st1"` with `.st1{display:none;}`: 1.4.0 imported its leader lines as 2 lines to grow, and 1.4.1 leaves them out. A 300 ppi PNG from 1.4.1 places at 199.98 × 170.01 mm on the 200 × 170 mm artboard, where 1.4.0's placed at 833 × 708 mm. The SVG opens on the same artboard, with each fill a compound path with the ventricles cut out.
+
 ## 1.4.1 2026-11-10
 
 Fixes from three rounds of QA, the third of them real design jobs in the released app: a coronal-section figure from Illustrator with fine folds in the cortex, a laser-engraved 100 mm coaster, and an A5 pen-plotter print with a PNG to post.
