@@ -1,8 +1,12 @@
 // Start shapes: the lines growth begins from. Each is made inside the boundary from a size, a count and the
 // seed, so the same settings always give the same start.
+import { EndType, FillRule, inflatePathsD, JoinType, unionD } from 'clipper2-ts'
 import type { Boundary } from './boundary'
 import { voronoiCells, type CellOptions } from './cells'
-import { distance, pathLength, resample, type Vec } from './geometry'
+import { distance, pathLength, resample, signedArea, type Vec } from './geometry'
+
+const PRECISION = 4 // Clipper rounds to 0.1 µm
+const ARC_TOLERANCE = 0.005 // mm: how far round offsets may stray from a true arc
 
 export type StartShape = 'circle' | 'line' | 'circles' | 'cells' | 'outline' | 'custom'
 export type Path = { closed: boolean; points: Vec[] }
@@ -61,37 +65,15 @@ export function startPaths(kind: StartShape, b: Boundary, sizePct: number, count
     }
     return placed.map(([x, y]) => ({ closed: true, points: circlePoints(x, y, r, 48) }))
   }
-  // Outline: each ring of the boundary moved in, then each point pushed until it's that far from every edge.
+  // Outline: the boundary set in from every edge, holes and all, as an offset path is: each ring of the set-in
+  // shape is a closed start line, the outline's own and one round each hole. Where the shape is narrower than twice
+  // the inset, as at a narrow fissure or between close holes, it drops out or parts in two, so the start lines never
+  // cross the boundary, a hole or each other. (Moving each point in on its own did: points either side of a narrow
+  // gap landed far apart, and the lines round close holes overlapped, so growth was held back from the start.)
   const inset = Math.max(side * 0.005, (Math.max(0.5, Math.min(95, sizePct)) / 100) * (side / 2))
-  const paths: Path[] = []
-  for (const ring of b.rings) {
-    const points = resample(ring, true, Math.max(side / 300, pathLength(ring, true) / 2000))
-    const n = points.length
-    const moved: (Vec | null)[] = points.map(([x, y], i) => {
-      const a = points[(i + n - 1) % n], c = points[(i + 1) % n]
-      let nx = -(c[1] - a[1]), ny = c[0] - a[0]
-      const l = Math.hypot(nx, ny) || 1
-      nx /= l; ny /= l
-      if (!b.contains(x + nx * inset * 0.01, y + ny * inset * 0.01)) { nx = -nx; ny = -ny }
-      let px = x + nx * inset, py = y + ny * inset
-      for (let k = 0; k < 4; k++) {
-        const [qx, qy] = b.closest(px, py)
-        const d = Math.hypot(px - qx, py - qy)
-        if (d < 1e-9 || Math.abs(d - inset) < inset * 0.01) break
-        const inside = b.contains(px, py) ? 1 : -1
-        px = qx + ((px - qx) / d) * inset * inside; py = qy + ((py - qy) / d) * inset * inside
-      }
-      return b.contains(px, py) && clearance(b, px, py) > inset * 0.8 ? [px, py] : null
-    })
-    // Runs of kept points; a ring that kept every point stays closed.
-    if (moved.every(Boolean)) { paths.push({ closed: true, points: moved as Vec[] }); continue }
-    const start = moved.findIndex(p => !p)
-    let run: Vec[] = []
-    for (let k = 1; k <= n; k++) {
-      const p = moved[(start + k) % n]
-      if (p) run.push(p)
-      else { if (run.length > 1 && pathLength(run, false) > inset) paths.push({ closed: false, points: run }); run = [] }
-    }
-  }
-  return paths
+  const shape = unionD(b.rings.map(r => r.map(([x, y]) => ({ x, y }))), [], FillRule.EvenOdd, PRECISION)
+  const setIn = inflatePathsD(shape, -inset, JoinType.Round, EndType.Polygon, 2, PRECISION, Math.min(ARC_TOLERANCE, inset / 50))
+  return setIn.map(p => p.map(({ x, y }): Vec => [x, y]))
+    .filter(ring => ring.length >= 3 && Math.abs(signedArea(ring)) > 1e-9 && pathLength(ring, true) > inset)
+    .map(ring => ({ closed: true, points: resample(ring, true, Math.max(side / 300, pathLength(ring, true) / 2000)) }))
 }

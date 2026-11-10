@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Strand } from '../growth/engine'
+import type { Polygon } from '../growth/geometry'
 import { DEFAULTS, sanitizeSettings } from './settings'
 import { exportContents, fillPath, growthSvg, MAX_PATH_SEGMENTS, strandPath, strandPaths } from './svgExport'
 
@@ -107,5 +108,25 @@ describe('SVG export', () => {
     // Projects from before Fill open with it off.
     expect(sanitizeSettings({}).fill).toBe(false)
     expect(sanitizeSettings({ fill: true, fillColor: 'pink' }).fillColor).toBe(DEFAULTS.fillColor)
+  })
+
+  it('keeps the boundary’s holes clear of the fill, and fills an island in a hole again', () => {
+    // A closed line round most of a square boundary, with a hole inside the line, an island in the hole, and a
+    // second hole the line runs across, which its own inside decides.
+    const square = (x0: number, y0: number, x1: number, y1: number): Polygon => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+    const rings = [square(10, 10, 190, 190), square(60, 60, 120, 120), square(80, 80, 100, 100), square(170, 90, 188, 110)]
+    for (const points of [[20, 20, 180, 20, 180, 180, 20, 180], [20, 180, 180, 180, 180, 20, 20, 20]]) {
+      const line: Strand = { closed: true, points: new Float64Array(points) }
+      const svg = growthSvg([line], rings, { ...DEFAULTS, showBoundary: false, fill: true, smoothCurves: false })
+      const subs = subpathsOf(/<g id="fill"[^>]*>\n<path d="([^"]+)"/.exec(svg)![1])
+      expect(subs).toHaveLength(3) // the line, the hole and the island
+      expect(winding(subs, 40, 40)).not.toBe(0) // inside the line
+      expect(winding(subs, 70, 70)).toBe(0) // in the hole
+      expect(winding(subs, 90, 90)).not.toBe(0) // on the island
+      expect(winding(subs, 100, 195)).toBe(0) // outside the line
+    }
+    // A boundary without holes leaves the fill as the line's own path.
+    const plain = growthSvg([flower(200)], [square(0, 0, 200, 200)], { ...DEFAULTS, showBoundary: false, fill: true })
+    expect(plain).toContain(`<path d="${fillPath(flower(200), true)}"/>`)
   })
 })

@@ -47,14 +47,14 @@ Every control describes itself on hover or keyboard focus, with its shortcut. Un
 2. **Shape.** Choose a sheet size, a Rectangle or Ellipse boundary and a margin, or press **Import SVG…** (or drop an SVG on the window). Pick a start: Circle, Line, Circles, Cells, Outline, or Drawn lines. **Cells** fills the boundary with Voronoi cells, each a closed line that grows into its own piece; **Colour the cells** fills each one in its own colour from a rainbow.
 3. **Style.** Choose **Colours: Gradient** on the Style tab to give each line its own colour, by where it starts: Rainbow, Sunset, Ocean, Viridis or your two colours, in any direction. With Fill on, each closed line is filled in its own colour too.
 4. **Draw.** Drag on the sheet to draw a line to grow, end where you began to close it, or click between lines for a small circle. A drawn line stops where it meets another, and a circle shrinks to fit, so drawing never makes lines cross. Erase removes a line. Both work while lines grow.
-5. **Export.** **SVG** and **DXF** are real size for Illustrator, plotters and lasers. **PNG** is an image at the sheet's pixels per inch. **Save** writes a `.linegrowth.json` project you can reopen and keep growing.
+5. **Export.** **SVG** and **DXF** are real size for Illustrator, plotters and lasers. **PNG** is an image at the sheet's pixels per inch, which places at real size too. **Save** writes a `.linegrowth.json` project you can reopen and keep growing.
 
 ### Working with Illustrator
 
 The Illustrator panel captured a selection and inserted the result back into the document. Line Growth does the same through SVG:
 
 1. In Illustrator, draw the boundary as a closed path, holes included as a compound path, and draw the lines to grow inside it. Save as SVG, or File › Export › Export As › SVG.
-2. Import it. As with Capture, **the largest closed path is the boundary and every other path grows.** Lines wholly outside the boundary are left out, and the status says so.
+2. Import it. As with Capture, **the largest closed path is the boundary and every other path grows.** Lines wholly outside the boundary are left out, and the status says so. Hidden layers and other hidden elements are left out too, as Illustrator doesn't draw them.
 3. Grow, then export SVG. The exported page is the same size as the imported file's artboard, so placing it at the artboard's corner (or opening it and pasting in place) lines it up with your original artwork.
 
 Illustrator writes SVG without a size, in points, so Line Growth reads such files at 72 points per inch and switches the units to points.
@@ -75,7 +75,7 @@ Pictures have no lines to grow. When Illustrator can't write a shape's look as S
 | Line | A straight line across the middle. |
 | Circles | Several circles scattered by the seed. |
 | Cells | Voronoi cells that fill the boundary, holes and all, each a closed line. Count sets how many, Gap how far apart neighbours start (a share of a cell's width). Size below 100 % fills a smaller copy of the outline, so cells can burst out of it, up to the boundary. Position puts that copy in the middle or against a side or corner, so they burst out only the other way: bottom left packs them against the left and bottom, bursting out at the top and right. The seed places them. |
-| Outline | A copy of each boundary ring set in from the edge, which grows inward and outward from the holes. |
+| Outline | The boundary set in from every edge, holes and all, as an offset path is: a closed line for each ring of the set-in shape, which grows inward from the outline and outward from the holes. Where the shape is narrower than twice the inset, as at a narrow fissure or between close holes, it drops out or parts in two, so the start lines never cross the boundary, a hole or each other. |
 | Drawn | Lines you drew or imported. Drawing on any start turns it into Drawn lines. |
 
 ### Exports
@@ -86,7 +86,7 @@ Every export holds what the view shows: the lines, plus the boundary and the nod
 | --- | --- | --- |
 | SVG | One path per line, as smooth curves through every node (or straight segments with Smooth curves off), stroked at the line width. A line of more than 32,000 nodes is a group of paths of up to 32,000 that meet end to end. With Fill on, group `fill`, under the lines, holds one filled shape per closed line. With Colours set to Gradient, each line's path (or the group of its pieces) has its own stroke colour, and each fill its own fill colour. The boundary is a solid mint path in group `boundary`; nodes are dots in group `nodes`. No background. | mm, in, pt or px, as the sheet's units |
 | DXF | AutoCAD R12 text. One polyline per line on layer `LINES` (past 32,000 nodes, polylines that meet end to end), the boundary on `BOUNDARY`, nodes as points on `NODES`. Lines only, without colours or fill. | mm, or in for inch sheets |
-| PNG | The design at the sheet's pixels per inch, in its colours, with the fill when it's on, optionally with a transparent background. | px |
+| PNG | The design at the sheet's pixels per inch, in its colours, with the fill when it's on, optionally with a transparent background. The file records its pixels per inch, so Illustrator, InDesign and Photoshop place it at real size. | px |
 | Project | Settings, the imported boundary, the start lines and every grown node, as `.linegrowth.json` (schema `line-growth/project`, version 1). | mm |
 
 ## Controls
@@ -111,7 +111,7 @@ Every export holds what the view shows: the lines, plus the boundary and the nod
 | Line width, colours | Line width and colour, and the sheet colour for the preview and PNG. |
 | Colours | One colour for every line, or Gradient: each line, its fill and its nodes take the gradient's colour at the middle of where the line started, so a line keeps its colour as it grows. The gradient runs from the line furthest back along the direction to the one furthest forward. |
 | Gradient, Direction | Rainbow, Sunset, Ocean, Viridis, or your two colours (From and To); Direction 0° runs left to right, 90° top to bottom. |
-| Fill | Fills the inside of each closed line with the fill colour, or with each line's own colour when Colours is Gradient. Open lines have no inside, so they stay lines. In the preview, SVG and PNG; DXF holds the lines only. |
+| Fill | Fills the inside of each closed line with the fill colour, or with each line's own colour when Colours is Gradient. Open lines have no inside, so they stay lines. The boundary's holes stay clear: in SVG each hole is cut out of the fill's compound path. In the preview, SVG and PNG; DXF holds the lines only. |
 | Boundary, Nodes | Show the boundary guide and the nodes, in the view and in exports. |
 | Smooth curves | SVG lines as curves through the nodes, or straight segments. |
 

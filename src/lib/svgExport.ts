@@ -2,7 +2,7 @@
 // came from an Illustrator file lines up with the original artwork when placed at the artboard's corner.
 // Like every export, it holds what the view shows: the lines, plus the boundary and nodes when they're on.
 import type { Strand } from '../growth/engine'
-import type { Polygon } from '../growth/geometry'
+import { signedArea, type Polygon } from '../growth/geometry'
 import { num } from './format'
 import { MAX_PATH_SEGMENTS, pieceRanges, segmentCount } from './pieces'
 import type { Settings } from './settings'
@@ -89,6 +89,44 @@ export function fillPath(strand: Strand, smooth: boolean, max = MAX_PATH_SEGMENT
 
 export const ringsPath = (rings: Polygon[]) => rings.map(r => `M${r.map(([x, y]) => `${num(x)} ${num(y)}`).join('L')}Z`).join('')
 
+const insideRing = (ring: Polygon, x: number, y: number) => {
+  let c = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j]
+    if ((yi > y) !== (yj > y) && x < xj + ((y - yj) * (xi - xj)) / (yi - yj)) c = !c
+  }
+  return c
+}
+
+// The boundary's holes stay clear of the fill, as they are of the lines. Each hole inside a closed line is one more
+// part of the line's fill, wound against it, so the nonzero rule leaves the hole empty; an island in a hole is wound
+// with the line again and fills. A ring the line runs across is left out, as the line's own inside decides there.
+export function fillHoles(strand: Strand, rings: Polygon[]): string {
+  if (rings.length < 2) return ''
+  const p = strand.points, n = p.length / 2
+  let area = 0
+  for (let i = 0, j = n - 1; i < n; j = i++) area += p[j * 2] * p[i * 2 + 1] - p[i * 2] * p[j * 2 + 1]
+  const inLine = (x: number, y: number) => {
+    let c = false
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const yi = p[i * 2 + 1], yj = p[j * 2 + 1]
+      if ((yi > y) !== (yj > y) && x < p[j * 2] + ((y - yj) * (p[i * 2] - p[j * 2])) / (yi - yj)) c = !c
+    }
+    return c
+  }
+  let d = ''
+  rings.forEach((ring, k) => {
+    // How many other rings this one is inside: odd for a hole, even for an outline or an island in a hole.
+    const depth = rings.reduce((sum, other, m) => sum + (m !== k && insideRing(other, ring[0][0], ring[0][1]) ? 1 : 0), 0)
+    if (!depth) return
+    if (![0, 0.25, 0.5, 0.75].every(t => { const [x, y] = ring[Math.floor(t * ring.length)]; return inLine(x, y) })) return
+    const wanted = depth % 2 ? -Math.sign(area) : Math.sign(area)
+    const r = Math.sign(signedArea(ring)) === wanted ? ring : [...ring].reverse()
+    d += `M${r.map(([x, y]) => `${num(x)} ${num(y)}`).join('L')}Z`
+  })
+  return d
+}
+
 // What an export will hold, in plain words, for the File tab.
 export function exportContents(s: Pick<Settings, 'showBoundary' | 'showNodes' | 'fill'>): string[] {
   return ['the lines', ...(s.fill ? ['the fill'] : []), ...(s.showBoundary ? ['the boundary'] : []), ...(s.showNodes ? ['the nodes'] : [])]
@@ -111,7 +149,7 @@ export function growthSvg(strands: Strand[], rings: Polygon[], s: Settings, colo
   const filled = s.fill ? strands.map((t, i) => [t, i] as const).filter(([t]) => t.closed && t.points.length >= 6) : []
   if (filled.length) {
     svg += `<g id="fill" fill="${s.fillColor}" fill-rule="nonzero" stroke="none">\n`
-    for (const [strand, i] of filled) svg += `<path${own(i, 'fill')} d="${fillPath(strand, s.smoothCurves)}"/>\n`
+    for (const [strand, i] of filled) svg += `<path${own(i, 'fill')} d="${fillPath(strand, s.smoothCurves)}${fillHoles(strand, rings)}"/>\n`
     svg += `</g>\n`
   }
   svg += `<g id="lines" fill="none" stroke="${s.lineColor}" stroke-width="${lw}" stroke-linecap="round" stroke-linejoin="round">\n`

@@ -97,4 +97,31 @@ describe('SVG import', () => {
     // Cut short by a failed download: its paths are broken, so it says so instead of using what's there.
     expect(() => readSvgDrawing('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0 L10 0 L10 10Z"/><path d="M0 0 L10')).toThrow('cut short')
   })
+
+  it('leaves out a hidden layer, as Illustrator saves it, and keeps what a later rule or a style shows', () => {
+    const svg = `<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 30.7.0, SVG Export Plug-In . SVG Version: 9.03 Build 0)  -->
+<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" viewBox="0 0 400 300" xml:space="preserve">
+<style type="text/css">
+	.st0{fill:none;stroke:#000000;}
+	.st1{display:none;}
+	.st2{display:inline;fill:none;stroke:#222222;}
+	.st3{display:none;}
+	.st4{display:inline;}
+</style>
+<g id="Outline"><rect class="st0" x="10" y="10" width="380" height="280"/></g>
+<g id="Labels" class="st1">
+	<line class="st2" x1="50" y1="50" x2="150" y2="150"/>
+	<line class="st2" x1="60" y1="50" x2="160" y2="150"/>
+	<text class="st2">Label</text>
+</g>
+<line class="st3 st4" x1="200" y1="50" x2="300" y2="150"/>
+<line class="st0" style="display:none" x1="210" y1="50" x2="310" y2="150"/>
+<line class="st1" style="display:inline" x1="220" y1="50" x2="320" y2="150"/>
+</svg>`
+    // The rectangle, the line a later class shows again and the line its own style shows; not the hidden layer's
+    // leader lines, nor the line its style hides.
+    const d = readSvgDrawing(svg)
+    expect(d.paths.map(p => p.points[0].map(v => Math.round(v / PT)))).toEqual([[10, 10], [200, 50], [220, 50]])
+  })
 })

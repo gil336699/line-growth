@@ -207,7 +207,34 @@ function attributesOf(text: string): Attributes {
   for (const m of text.matchAll(ATTRIBUTE)) out[m[1].toLowerCase()] = m[2] ?? m[3] ?? ''
   return out
 }
-const hidden = (a: Attributes) => /(^|;)\s*display\s*:\s*none/i.test(a.style ?? '') || a.display === 'none'
+// Hidden by its display: its style, then its classes (the last rule that sets display wins), then its attribute.
+// Illustrator writes a hidden layer this way when it saves SVG: <g id="Labels" class="st1">, with .st1{display:none;}.
+const displayIn = (css: string) => /(?:^|;)\s*display\s*:\s*([\w-]+)/i.exec(css)?.[1].toLowerCase() ?? null
+type DisplayRules = Map<string, { value: string; order: number }>
+function hiddenBy(a: Attributes, byClass: DisplayRules): boolean {
+  const inStyle = a.style ? displayIn(a.style) : null
+  if (inStyle) return inStyle === 'none'
+  let last: { value: string; order: number } | null = null
+  for (const c of (a.class ?? '').split(/\s+/)) { const rule = byClass.get(c); if (rule && (!last || rule.order > last.order)) last = rule }
+  if (last) return last.value === 'none'
+  return a.display === 'none'
+}
+
+// The display each class sets in the file's style sheets, and in what order, as later rules win.
+function displayClasses(text: string): DisplayRules {
+  const out: DisplayRules = new Map()
+  const css = text.replace(/<!--[\s\S]*?-->/g, '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+  let order = 0
+  for (const [, sheet] of css.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) {
+    for (const [, selectors, rules] of sheet.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const value = displayIn(rules)
+      if (!value) continue
+      order++
+      for (const selector of selectors.split(',')) { const c = /^\s*\.([\w-]+)\s*$/.exec(selector); if (c) out.set(c[1], { value, order }) }
+    }
+  }
+  return out
+}
 
 // ---------- clipping paths ----------
 
@@ -310,6 +337,8 @@ export function readSvgDrawing(text: string, tolerance = 0.02): SvgDrawing {
   // Clipping paths, in their own coordinates, and where each is used. They're placed in the user space of the
   // element that uses them, so they only become paths at the end, if the file has no shapes of its own.
   const clipClass = clipClasses(text)
+  const displayClass = displayClasses(text)
+  const isHidden = (a: Attributes) => hiddenBy(a, displayClass)
   const clips = new Map<string, { shapes: { points: Vec[]; element: number }[]; elements: number }>()
   const clipUses: { id: string; m: Matrix }[] = []
   let clipTotal = 0, pictures = 0
@@ -328,14 +357,14 @@ export function readSvgDrawing(text: string, tolerance = 0.02): SvgDrawing {
     const a = attributesOf(rest)
     const parent = stack[stack.length - 1]
     let m = parent ? parent.m : IDENTITY
-    const skip = Boolean(parent?.skip) || SKIP.has(name) || hidden(a)
+    const skip = Boolean(parent?.skip) || SKIP.has(name) || isHidden(a)
     let clip: string | null = null
     if (name === 'clippath') {
       // objectBoundingBox clips are sized to whatever uses them, so they give no outline of their own.
-      clip = a.clippathunits?.toLowerCase() === 'objectboundingbox' || hidden(a) ? null : a.id ?? null
+      clip = a.clippathunits?.toLowerCase() === 'objectboundingbox' || isHidden(a) ? null : a.id ?? null
       m = IDENTITY
-    } else if (parent?.clip && !SKIP.has(name) && !hidden(a)) clip = parent.clip
-    if (name === 'image' && !parent?.skip && !hidden(a)) pictures++
+    } else if (parent?.clip && !SKIP.has(name) && !isHidden(a)) clip = parent.clip
+    if (name === 'image' && !parent?.skip && !isHidden(a)) pictures++
     if (name === 'svg' && !parent) {
       const vb = numbers(a.viewbox ?? '')
       const w = lengthMm(a.width), h = lengthMm(a.height)
@@ -387,7 +416,7 @@ export function readSvgDrawing(text: string, tolerance = 0.02): SvgDrawing {
       entry.elements++
     }
     // Pictures and text are drawn too, though they aren't outlines, so a clip they use counts.
-    if (!parent?.skip && !hidden(a) && !UNDRAWN.has(name)) { const id = clipOf(a, clipClass); if (id) clipUses.push({ id, m }) }
+    if (!parent?.skip && !isHidden(a) && !UNDRAWN.has(name)) { const id = clipOf(a, clipClass); if (id) clipUses.push({ id, m }) }
     if (!selfClosing) stack.push({ name, m, skip, clip })
   }
   if (!rootScale) throw new SvgShapeError('This file is not an SVG drawing.')

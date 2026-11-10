@@ -69,13 +69,17 @@ export function drawGrowth(ctx: CanvasRenderingContext2D, strands: Strand[], rin
   }
 
   // Each closed line's inside, filled on its own as Illustrator fills separate paths. With a colour for each line,
-  // it fills in its own colour; otherwise in the fill colour.
+  // it fills in its own colour; otherwise in the fill colour. The fill stays inside the boundary, so its holes stay
+  // clear, as they are of the lines (the SVG cuts them out of each fill: svgExport's fillHoles).
   if (s.fill) {
+    ctx.save()
+    if (rings.length > 1) { ctx.beginPath(); ringsPath(ctx, rings); ctx.clip('evenodd') }
     strands.forEach((strand, i) => {
       if (!strand.closed || strand.points.length < 6) return
       ctx.fillStyle = o.colors?.[i] ?? s.fillColor
       ctx.beginPath(); strandPath(ctx, strand); ctx.fill('nonzero')
     })
+    ctx.restore()
   }
 
   ctx.lineWidth = Math.max(s.lineWidth, minLine)
@@ -124,5 +128,30 @@ export function renderPng(strands: Strand[], rings: Polygon[], s: Settings, widt
   const ctx = canvas.getContext('2d')
   if (!ctx) return Promise.resolve(null)
   drawGrowth(ctx, strands, rings, s, { scale: width / s.width, ox: 0, oy: 0, dpr: 1, preview: false, transparent: s.transparentPng, colors })
-  return new Promise(resolve => canvas.toBlob(blob => resolve(blob), 'image/png'))
+  return new Promise(resolve => canvas.toBlob(blob => resolve(blob ? withResolution(blob, s.dpi) : null), 'image/png'))
+}
+
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0 })
+const crc32 = (bytes: Uint8Array) => { let c = 0xffffffff; for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0 }
+
+// A PNG keeps its print size as pixels per metre in a pHYs chunk. The browser writes none, and without one
+// Illustrator, InDesign and Photoshop read 72 pixels per inch, so a 100 mm sheet at 300 ppi placed at 417 mm.
+// This writes the sheet's pixels per inch into the file, after the header, in place of any there.
+export async function withResolution(png: Blob, dpi: number): Promise<Blob> {
+  const bytes = new Uint8Array(await png.arrayBuffer())
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const type = (at: number) => String.fromCharCode(...bytes.subarray(at + 4, at + 8))
+  if (bytes.length < 33 || type(8) !== 'IHDR') return png
+  const chunk = new Uint8Array(21), out = new DataView(chunk.buffer)
+  const perMetre = Math.round(dpi / 0.0254)
+  out.setUint32(0, 9); chunk.set([0x70, 0x48, 0x59, 0x73], 4) // pHYs
+  out.setUint32(8, perMetre); out.setUint32(12, perMetre); chunk[16] = 1 // the unit is the metre
+  out.setUint32(17, crc32(chunk.subarray(4, 17)))
+  const parts: Uint8Array[] = [bytes.subarray(0, 33), chunk]
+  for (let at = 33; at + 12 <= bytes.length;) {
+    const next = at + 12 + view.getUint32(at)
+    if (type(at) !== 'pHYs') parts.push(bytes.subarray(at, next))
+    at = next
+  }
+  return new Blob(parts as BlobPart[], { type: 'image/png' })
 }
