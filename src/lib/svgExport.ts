@@ -1,5 +1,6 @@
 // SVG at real size, for Illustrator, plotters and laser software. The page is the sheet, so a design that
-// came from an Illustrator file lines up with the original artwork when placed at the artboard's corner.
+// came from an Illustrator file lines up with the original artwork when pasted in place in it (File › Place would
+// size the drawing to its own lines, not the page, and put it where it's dropped).
 // Like every export, it holds what the view shows: the lines, plus the boundary and nodes when they're on.
 import type { Strand } from '../growth/engine'
 import { signedArea, type Polygon } from '../growth/geometry'

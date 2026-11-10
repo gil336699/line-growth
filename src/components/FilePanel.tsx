@@ -39,7 +39,7 @@ export const FilePanel = memo(function FilePanel({ s, change, splitInto, unsaved
         tip="Write SVG lines as smooth curves through every node, with fewer corners. Off writes straight segments between nodes, as the Illustrator panel did."
         onChange={smoothCurves => change({ smoothCurves }, 'smoothCurves')} />
       {splitInto > 1 && <p className="hint warning">Illustrator can’t hold a path of 32,767 points or more, so the longest line exports as {splitInto} paths that meet end to end, in SVG and DXF{s.fill ? ', and its fill as one shape that fills exactly' : ''}. For one closed path, keep each line at {MAX_PATH_SEGMENTS.toLocaleString()} nodes or fewer with Max nodes on the Grow tab.</p>}
-      <p className="hint">Exports hold what the view shows: {contents}.{s.fill ? ' DXF holds no fill.' : ''}{fromFile ? ' The page matches the imported SVG, so the result lines up with your artwork when placed at the artboard’s corner.' : ''}</p>
+      <p className="hint">Exports hold what the view shows: {contents}.{s.fill ? ' DXF holds no fill.' : ''}{fromFile ? ' The page matches the imported SVG: open the SVG in Illustrator, copy it all, and use Edit › Paste in Place in your file to line it up with your artwork.' : ''}</p>
     </Section>
 
     <Section title="For images">

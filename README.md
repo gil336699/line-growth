@@ -55,7 +55,7 @@ The Illustrator panel captured a selection and inserted the result back into the
 
 1. In Illustrator, draw the boundary as a closed path, holes included as a compound path, and draw the lines to grow inside it. Save as SVG, or File › Export › Export As › SVG.
 2. Import it. As with Capture, **the largest closed path is the boundary and every other path grows.** Lines wholly outside the boundary are left out, and the status says so. Hidden layers and other hidden elements are left out too, as Illustrator doesn't draw them.
-3. Grow, then export SVG. The exported page is the same size as the imported file's artboard, so placing it at the artboard's corner (or opening it and pasting in place) lines it up with your original artwork.
+3. Grow, then export SVG. The exported page is the same size as the imported file's artboard, so it lines up with your original artwork when you open it in Illustrator, select all, copy, and choose **Edit › Paste in Place** in your file (checked in Illustrator 2026: within 0.01 mm). File › Place doesn't line it up: it brings in the drawing sized to its own lines, not the page, wherever you drop it.
 
 Illustrator writes SVG without a size, in points, so Line Growth reads such files at 72 points per inch and switches the units to points.
 
