@@ -94,7 +94,8 @@ export function exportContents(s: Pick<Settings, 'showBoundary' | 'showNodes' | 
   return ['the lines', ...(s.fill ? ['the fill'] : []), ...(s.showBoundary ? ['the boundary'] : []), ...(s.showNodes ? ['the nodes'] : [])]
 }
 
-export function growthSvg(strands: Strand[], rings: Polygon[], s: Settings): string {
+// colors: each line's own colour (lib/colors.ts), written on its path, or null for the one line and fill colour.
+export function growthSvg(strands: Strand[], rings: Polygon[], s: Settings, colors: string[] | null = null): string {
   const lw = num(s.lineWidth, 4)
   let svg = `<?xml version="1.0" encoding="UTF-8"?>\n`
     + `<svg xmlns="http://www.w3.org/2000/svg" ${sizeAttributes(s)} viewBox="0 0 ${num(s.width)} ${num(s.height)}">\n`
@@ -105,23 +106,26 @@ export function growthSvg(strands: Strand[], rings: Polygon[], s: Settings): str
   }
   // The fill sits under the lines, in its own group, so either can be used or removed in Illustrator. Open lines
   // have no inside, so only closed lines are filled.
-  const filled = s.fill ? strands.filter(t => t.closed && t.points.length >= 6) : []
+  // Each line's own colour goes on its path, or on the group of its pieces, so it stays one colour in Illustrator.
+  const own = (i: number, attr: 'fill' | 'stroke') => (colors?.[i] ? ` ${attr}="${colors[i]}"` : '')
+  const filled = s.fill ? strands.map((t, i) => [t, i] as const).filter(([t]) => t.closed && t.points.length >= 6) : []
   if (filled.length) {
     svg += `<g id="fill" fill="${s.fillColor}" fill-rule="nonzero" stroke="none">\n`
-    for (const strand of filled) svg += `<path d="${fillPath(strand, s.smoothCurves)}"/>\n`
+    for (const [strand, i] of filled) svg += `<path${own(i, 'fill')} d="${fillPath(strand, s.smoothCurves)}"/>\n`
     svg += `</g>\n`
   }
   svg += `<g id="lines" fill="none" stroke="${s.lineColor}" stroke-width="${lw}" stroke-linecap="round" stroke-linejoin="round">\n`
-  for (const strand of strands) {
-    if (strand.points.length < 4) continue
+  strands.forEach((strand, i) => {
+    if (strand.points.length < 4) return
     const pieces = strandPaths(strand, s.smoothCurves)
-    svg += pieces.length === 1 ? `<path d="${pieces[0]}"/>\n` : `<g>\n${pieces.map(d => `<path d="${d}"/>\n`).join('')}</g>\n`
-  }
+    svg += pieces.length === 1 ? `<path${own(i, 'stroke')} d="${pieces[0]}"/>\n` : `<g${own(i, 'stroke')}>\n${pieces.map(d => `<path d="${d}"/>\n`).join('')}</g>\n`
+  })
   svg += `</g>\n`
   if (s.showNodes) {
     const r = num(nodeRadius(s.lineWidth), 4)
+    const dots = (strand: Strand) => { let out = ''; for (let i = 0; i < strand.points.length; i += 2) out += `<circle cx="${num(strand.points[i])}" cy="${num(strand.points[i + 1])}" r="${r}"/>\n`; return out }
     svg += `<g id="nodes" fill="${s.lineColor}">\n`
-    for (const strand of strands) for (let i = 0; i < strand.points.length; i += 2) svg += `<circle cx="${num(strand.points[i])}" cy="${num(strand.points[i + 1])}" r="${r}"/>\n`
+    strands.forEach((strand, i) => { svg += colors?.[i] ? `<g fill="${colors[i]}">\n${dots(strand)}</g>\n` : dots(strand) })
     svg += `</g>\n`
   }
   return `${svg}</svg>\n`

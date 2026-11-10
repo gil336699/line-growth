@@ -5,7 +5,7 @@ import { autoTune, forNodes } from '../growth/autotune'
 import { separateStarts } from '../growth/separate'
 import { boundaryOf, type Boundary } from '../growth/boundary'
 import type { GrowthParams, Strand } from '../growth/engine'
-import { boxOf, ellipseRing, flat, pathLength, resample, unflat, type Box, type Polygon, type Vec } from '../growth/geometry'
+import { boxOf, ellipseRing, flat, pathLength, resample, signedArea, unflat, type Box, type Polygon, type Vec } from '../growth/geometry'
 import { startPaths, type Path } from '../growth/seeds'
 import { marginMax, sanitizeSettings, scaledRange, type Settings } from './settings'
 
@@ -41,9 +41,10 @@ export function startOf(d: Pick<Design, 'settings' | 'imported' | 'custom'>): Pa
   const s = d.settings
   if (s.start === 'custom') return d.custom
   const b = boundaryOfDesign(d)
-  const key = `${s.start}|${s.startSize}|${s.startCount}|${s.start === 'circles' ? s.seed : 0}`
+  const cells = { count: s.cellCount, size: s.cellSize, gap: s.cellGap }
+  const key = s.start === 'cells' ? `cells|${cells.count}|${cells.size}|${cells.gap}|${s.seed}` : `${s.start}|${s.startSize}|${s.startCount}|${s.start === 'circles' ? s.seed : 0}`
   if (startCache && startCache.key === key && startCache.boundary === b) return startCache.paths
-  const paths = startPaths(s.start, b, s.startSize, s.startCount, s.seed)
+  const paths = startPaths(s.start, b, s.startSize, s.startCount, s.seed, cells)
   startCache = { key, boundary: b, paths }
   return paths
 }
@@ -80,14 +81,24 @@ export function growthParams(s: Settings): GrowthParams {
 // Auto tune: starting values for this boundary and start shape, as the panel chose them on Capture. Once Max
 // nodes has been set by hand (autoNodes off), the lengths are scaled to suit it instead, so more nodes give
 // finer, denser lines.
+export const CELL_SEGMENTS = 7
+
 export function tuned(d: Pick<Design, 'settings' | 'imported' | 'custom'>): Settings {
   const s = d.settings
   if (!s.autoTune) return s
   const b = boundaryOfDesign(d)
   const start = startOf(d)
   const box = boxOf([...b.rings, ...start.map(p => p.points)])
-  const growLength = start.reduce((sum, p) => sum + pathLength(p.points, p.closed), 0)
-  const panel = autoTune(box, growLength, b.length, start.some(p => p.closed))
+  const total = start.reduce((sum, p) => sum + pathLength(p.points, p.closed), 0)
+  // Each cell of the Cells start grows as a line of its own, so it's tuned as one cell. Tuned on all of them
+  // together, the panel's rules pick lengths so long that the cells only shrink. Small cells are tuned finer
+  // still, at least CELL_SEGMENTS segment lengths across, with as many more nodes as keep the same look.
+  const cells = s.start === 'cells' && start.length > 0
+  let panel = autoTune(box, cells ? total / start.length : total, b.length, start.some(p => p.closed))
+  if (cells) {
+    const across = Math.sqrt(start.reduce((sum, p) => sum + Math.abs(signedArea(p.points)), 0) / start.length) / CELL_SEGMENTS
+    if (panel.segmentLength > across) panel = forNodes(panel, Math.round(panel.maxNodes * (panel.segmentLength / across) ** 2))
+  }
   const base = sanitizeSettings({ ...s, ...panel, lineWidth: Math.max(0.01, panel.lineWidth) })
   if (s.autoNodes) return base
   // Scaled from the lengths as kept within the sheet's ranges, which is what Auto tune really uses: a drawing
@@ -117,7 +128,9 @@ export const lineLength = (strands: Strand[]) => strands.reduce((sum, s) => {
 // ---------- What a change does ----------
 
 const SHEET = ['width', 'height', 'margin'] as const
-const START = ['start', 'startSize', 'startCount'] as const
+const START = ['start', 'startSize', 'startCount', 'cellCount', 'cellSize', 'cellGap'] as const
+// Starts the seed places, so a new seed makes a new start.
+const SEEDED = ['circles', 'cells']
 
 export type Plan = { design: Design; discards: boolean }
 
@@ -140,7 +153,7 @@ export function planChange(d: Design, patch: Partial<Settings>, imported: Import
   const next = sanitizeSettings({ ...s, ...patch })
   const grown = d.state.step > 0
   const shapeChanged = next.shape !== s.shape || imported !== d.imported
-  const startChanged = START.some(k => next[k] !== s[k]) || (next.start === 'circles' && next.seed !== s.seed)
+  const startChanged = START.some(k => next[k] !== s[k]) || (SEEDED.includes(next.start) && next.seed !== s.seed)
   const sheetChanged = SHEET.some(k => next[k] !== s[k])
   const base = { settings: next, imported, custom: d.custom }
   // Turning Auto tune on tunes now, as the panel did, Max nodes included, but keeps the lines grown so far.

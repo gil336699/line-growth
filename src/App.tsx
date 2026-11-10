@@ -10,7 +10,8 @@ import { TabPanel, Tabs } from './components/Tabs'
 import { TooltipLayer } from './components/Tooltip'
 import { Boundary, boundaryOf } from './growth/boundary'
 import type { Polygon, Vec } from './growth/geometry'
-import { boundaryRings, freshDesign, type Design, type Imported } from './lib/design'
+import { lineColors } from './lib/colors'
+import { boundaryRings, freshDesign, startOf, type Design, type Imported } from './lib/design'
 import { growthDxf } from './lib/dxfExport'
 import { EXTENSION, parseProject, ProjectError, serializeProject } from './lib/project'
 import { pngProblem, renderPng } from './lib/render'
@@ -89,6 +90,9 @@ export function App() {
   const boundaryPoints = useMemo(() => boundary.repellers(Math.max(s.segmentLength, boundary.length / 20_000)).x.length, [boundary, s.segmentLength])
   // The lines as the worker last sent them; stats.revision changes with every frame.
   const strands = growth.live.current.strands
+  // Each line's own colour, by where it starts, when Colours is Gradient.
+  const start = startOf(design)
+  const colors = useMemo(() => lineColors(s, start, strands.length), [s, start, strands.length])
   // How many paths the longest line exports as, past Illustrator's limit on points in a path.
   const splitInto = strands.reduce((most, t) => Math.max(most, Math.ceil(segmentCount(t.points.length / 2, t.closed) / MAX_PATH_SEGMENTS)), 1)
 
@@ -239,14 +243,15 @@ export function App() {
     const d = growth.current()
     const base = baseName(s, d.imported)
     const lines = d.state.strands
-    if (kind === 'svg') report(`${base}.svg`, await saveFile(`${base}.svg`, growthSvg(lines, rings, s), 'image/svg+xml', 'SVG drawing'))
+    const own = lineColors(s, startOf(d), lines.length)
+    if (kind === 'svg') report(`${base}.svg`, await saveFile(`${base}.svg`, growthSvg(lines, rings, s, own), 'image/svg+xml', 'SVG drawing'))
     if (kind === 'dxf') report(`${base}.dxf`, await saveFile(`${base}.dxf`, growthDxf(lines, rings, s), 'application/dxf', 'DXF drawing'))
     if (kind === 'png') {
       const [w, h] = pixelSize(s.width, s.height, s.dpi)
       const problem = pngProblem(w, h)
       if (problem) { setStatus({ text: problem, warning: true }); return }
       setStatus({ text: `Drawing a ${w.toLocaleString()} × ${h.toLocaleString()} px PNG…` })
-      const blob = await renderPng(lines, rings, s, w, h)
+      const blob = await renderPng(lines, rings, s, w, h, own)
       if (!blob) { setStatus({ text: 'The browser could not draw a PNG this large. Lower the pixels per inch.', warning: true }); return }
       report(`${base}.png`, await saveFile(`${base}.png`, blob, 'image/png', 'PNG image'))
     }
@@ -317,7 +322,7 @@ export function App() {
   return <main className="studio">
     <TooltipLayer />
     <div className="stage">
-      <Stage strands={strands} rings={rings} boundary={boundary} settings={s} tool={tool} frameRef={frameRef} controlRef={stageRef}
+      <Stage strands={strands} colors={colors} rings={rings} boundary={boundary} settings={s} tool={tool} frameRef={frameRef} controlRef={stageRef}
         onDraw={path => { growth.draw(path); setStatus(null) }} onErase={index => { growth.erase(index); setStatus({ text: 'Removed a line. Undo brings it back.' }) }}
         onZoom={setZoom} onNotice={text => setStatus({ text })} onSpaceTap={() => { if (!pending && !showHelp) toggleGrow() }} />
     </div>

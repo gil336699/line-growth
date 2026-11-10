@@ -4,7 +4,9 @@ import { autoTune } from '../growth/autotune'
 import { Boundary } from '../growth/boundary'
 import { Grower } from '../growth/engine'
 import { startPaths } from '../growth/seeds'
-import { addLine, boundaryOfDesign, freshDesign, growthParams, planChange, removeLine, resetState, type Design } from './design'
+import type { Strand } from '../growth/engine'
+import { lineColors } from './colors'
+import { addLine, boundaryOfDesign, CELL_SEGMENTS, freshDesign, growthParams, nodeCount, planChange, removeLine, resetState, startOf, type Design } from './design'
 import { growthDxf, LAYER_BOUNDARY, LAYER_LINES, LAYER_NODES } from './dxfExport'
 import { parseProject, ProjectError, serializeProject } from './project'
 import { DEFAULTS, sanitizeSettings } from './settings'
@@ -16,6 +18,21 @@ const grow = (d: Design, steps: number): Design => {
   const g = new Grower(d.state.strands.map(s => ({ closed: s.closed, points: s.points.slice() })), d.state.step, growthParams(d.settings), boundaryOfDesign(d))
   for (let i = 0; i < steps; i++) g.stepOnce()
   return { ...d, state: { strands: g.strands, step: g.step } }
+}
+
+// Places where lines cross each other or themselves (edges sharing a node don't count). Brute force with a box test.
+function crossings(strands: Strand[]): number {
+  const e: number[][] = []
+  strands.forEach((s, k) => { const n = s.points.length / 2; for (let i = 0; i < (s.closed ? n : n - 1); i++) { const j = (i + 1) % n; e.push([s.points[i * 2], s.points[i * 2 + 1], s.points[j * 2], s.points[j * 2 + 1], k, i, j]) } })
+  const o = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number) => (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+  let count = 0
+  for (let a = 0; a < e.length; a++) for (let b = a + 1; b < e.length; b++) {
+    const p = e[a], q = e[b]
+    if (p[4] === q[4] && (p[5] === q[5] || p[5] === q[6] || p[6] === q[5] || p[6] === q[6])) continue
+    if (Math.max(p[0], p[2]) < Math.min(q[0], q[2]) || Math.max(q[0], q[2]) < Math.min(p[0], p[2]) || Math.max(p[1], p[3]) < Math.min(q[1], q[3]) || Math.max(q[1], q[3]) < Math.min(p[1], p[3])) continue
+    if (o(p[0], p[1], p[2], p[3], q[0], q[1]) * o(p[0], p[1], p[2], p[3], q[2], q[3]) < 0 && o(q[0], q[1], q[2], q[3], p[0], p[1]) * o(q[0], q[1], q[2], q[3], p[2], p[3]) < 0) count++
+  }
+  return count
 }
 
 describe('auto tune', () => {
@@ -99,7 +116,7 @@ describe('auto tune and max nodes', () => {
 describe('start shapes', () => {
   const b = new Boundary(boundaryOfDesign({ settings: DEFAULTS, imported: null }).rings)
   it('makes every start shape inside the boundary', () => {
-    for (const kind of ['circle', 'line', 'circles', 'outline'] as const) {
+    for (const kind of ['circle', 'line', 'circles', 'cells', 'outline'] as const) {
       const paths = startPaths(kind, b, 20, 6, 3)
       expect(paths.length, kind).toBeGreaterThan(0)
       for (const p of paths) for (const [x, y] of p.points) expect(b.contains(x, y), kind).toBe(true)
@@ -112,6 +129,60 @@ describe('start shapes', () => {
     const holed = new Boundary(captureDrawing(pill).boundary!)
     const [circle] = startPaths('circle', holed, 15, 1, 1)
     for (const [x, y] of circle.points) expect(holed.contains(x, y)).toBe(true)
+  })
+})
+
+describe('the Cells start', () => {
+  const cells = sanitizeSettings({ ...DEFAULTS, start: 'cells' })
+
+  it('fills the boundary with cells that grow into pieces of their own, never crossing', () => {
+    const d = freshDesign(cells)
+    expect(d.state.strands).toHaveLength(30)
+    expect(d.state.strands.every(s => s.closed)).toBe(true)
+    const start = nodeCount(d.state)
+    // Tuned on all 30 cells together, the panel's rules picked lengths so long that the cells only shrank and
+    // stopped. Tuned as one cell, they grow to Max nodes.
+    const g = grow(d, 150)
+    expect(nodeCount(g.state)).toBe(d.settings.maxNodes)
+    expect(nodeCount(g.state)).toBeGreaterThan(start * 2)
+    expect(crossings(g.state.strands)).toBe(0)
+  })
+
+  it('tunes small cells finer, with as many more nodes as keep the look', () => {
+    const few = freshDesign(cells).settings, many = freshDesign({ ...cells, cellCount: 200 })
+    expect(many.settings.segmentLength).toBeLessThan(few.segmentLength * 0.7)
+    expect(many.settings.maxNodes).toBeGreaterThan(few.maxNodes * 2)
+    // Each cell is about CELL_SEGMENTS segment lengths across.
+    const across = Math.sqrt(startOf(many).reduce((sum, p) => sum + Math.abs(p.points.reduce((a, [x, y], i, ps) => a + x * ps[(i + 1) % ps.length][1] - ps[(i + 1) % ps.length][0] * y, 0) / 2), 0) / 200)
+    expect(across / many.settings.segmentLength).toBeCloseTo(CELL_SEGMENTS, 1)
+    const g = grow(many, 60)
+    expect(nodeCount(g.state)).toBeGreaterThan(nodeCount(many.state) * 1.5)
+  })
+
+  it('starts again for a new count, size, gap or seed, while new colours keep the lines', () => {
+    const grown = grow(freshDesign(cells), 20)
+    for (const patch of [{ cellCount: 12 }, { cellSize: 70 }, { cellGap: 30 }, { seed: 5 }]) {
+      const next = planChange(grown, patch)
+      expect(next.discards).toBe(true)
+      expect(next.design.state.step).toBe(0)
+    }
+    const coloured = planChange(grown, { colors: 'gradient', fill: true, gradient: 'viridis', gradientAngle: 45 })
+    expect(coloured.discards).toBe(false)
+    expect(coloured.design.state).toBe(grown.state)
+    // Each cell keeps the colour of where it started, however it grows.
+    const s = coloured.design.settings
+    expect(lineColors(s, startOf(coloured.design), 30)).toEqual(lineColors(s, startOf(freshDesign({ ...s, colors: 'gradient' })), 30))
+  })
+
+  it('reopens from a project file with its cells and colours, and old files open in one colour', () => {
+    const d = grow(freshDesign(sanitizeSettings({ ...cells, colors: 'gradient', gradient: 'custom', gradientFrom: '#112233', gradientTo: '#ddeeff', cellCount: 18 })), 40)
+    const back = parseProject(serializeProject(d))
+    expect(back.settings).toEqual(d.settings)
+    expect(startOf(back)).toEqual(startOf(d))
+    expect(lineColors(back.settings, startOf(back), back.state.strands.length)).toEqual(lineColors(d.settings, startOf(d), d.state.strands.length))
+    const old = parseProject('{"schema":"line-growth/project","version":1,"settings":{"fill":true,"fillColor":"#ff0000"}}')
+    expect(old.settings.colors).toBe('one')
+    expect(old.settings.start).toBe(DEFAULTS.start)
   })
 })
 

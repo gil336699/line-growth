@@ -1,9 +1,10 @@
 // Start shapes: the lines growth begins from. Each is made inside the boundary from a size, a count and the
 // seed, so the same settings always give the same start.
 import type { Boundary } from './boundary'
+import { voronoiCells, type CellOptions } from './cells'
 import { distance, pathLength, resample, type Vec } from './geometry'
 
-export type StartShape = 'circle' | 'line' | 'circles' | 'outline' | 'custom'
+export type StartShape = 'circle' | 'line' | 'circles' | 'cells' | 'outline' | 'custom'
 export type Path = { closed: boolean; points: Vec[] }
 
 function rng(seed: number) {
@@ -23,9 +24,11 @@ const circlePoints = (cx: number, cy: number, r: number, n = 96): Vec[] =>
 export const clearance = (b: Boundary, x: number, y: number) => { const [px, py] = b.closest(x, y); return Math.hypot(px - x, py - y) }
 
 // sizePct: the shape's diameter or length as a percentage of the boundary's smaller side. For Outline it is
-// how far in from the edge, as a percentage of half the smaller side.
-export function startPaths(kind: StartShape, b: Boundary, sizePct: number, count: number, seed: number): Path[] {
+// how far in from the edge, as a percentage of half the smaller side. Cells take their own count, size and gap.
+export function startPaths(kind: StartShape, b: Boundary, sizePct: number, count: number, seed: number,
+  cells: Omit<CellOptions, 'seed'> = { count: 30, size: 100, gap: 10 }): Path[] {
   if (b.empty || kind === 'custom') return []
+  if (kind === 'cells') return voronoiCells(b, { ...cells, seed }).map(points => ({ closed: true, points }))
   const [x0, y0, x1, y1] = b.box
   const side = Math.min(x1 - x0, y1 - y0)
   const size = (Math.max(0.5, Math.min(100, sizePct)) / 100) * side

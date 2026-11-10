@@ -23,6 +23,7 @@ const STARTS: Option<StartShape>[] = [
   { value: 'circle', label: 'Circle', tip: 'Start from a small circle in the roomiest part of the boundary.' },
   { value: 'line', label: 'Line', tip: 'Start from a short straight line across the middle.' },
   { value: 'circles', label: 'Circles', tip: 'Start from several small circles scattered at random. The seed places them.' },
+  { value: 'cells', label: 'Cells', tip: 'Start from Voronoi cells that fill the boundary, holes and all, each a closed line that grows into its own piece. The seed places them.' },
   { value: 'outline', label: 'Outline', tip: 'Start from a copy of the boundary, set in from the edge, which grows inward.' },
   { value: 'custom', label: 'Drawn', tip: 'The lines you drew with the Draw tool or imported from an SVG.' },
 ]
@@ -90,13 +91,25 @@ export const ShapePanel = memo(function ShapePanel({ s, imported, customCount, c
     </Section>
 
     <Section title="Start" tip="The lines growth begins from. Reset goes back to them.">
-      <Segmented label="Start from" options={STARTS.map(o => o.value === 'custom' && !customCount ? { ...o, unavailable: 'Draw a line with the Draw tool, or import an SVG with lines to grow.' } : o)}
+      <Segmented label="Start from" columns={3} options={STARTS.map(o => o.value === 'custom' && !customCount ? { ...o, unavailable: 'Draw a line with the Draw tool, or import an SVG with lines to grow.' } : o)}
         value={s.start} onChange={start => change({ start }, 'start')} />
-      {s.start !== 'custom' && <RangeField label={sizeLabel} value={s.startSize} min={LIMITS.startSize[0]} max={s.start === 'outline' ? 95 : LIMITS.startSize[1]} step={1} digits={0} suffix="%"
+      {s.start !== 'custom' && s.start !== 'cells' && <RangeField label={sizeLabel} value={s.startSize} min={LIMITS.startSize[0]} max={s.start === 'outline' ? 95 : LIMITS.startSize[1]} step={1} digits={0} suffix="%"
         tip={s.start === 'outline' ? 'How far in from the edge the outline starts, as a share of half the boundary’s smaller side.' : 'How big the start shape is, as a share of the boundary’s smaller side.'}
         onChange={startSize => change({ startSize: Math.round(startSize) }, 'startSize')} />}
       {s.start === 'circles' && <RangeField label="Count" value={s.startCount} min={LIMITS.startCount[0]} max={LIMITS.startCount[1]} step={1} digits={0}
         tip="How many circles to start from. Fewer fit when they’re large." onChange={startCount => change({ startCount: Math.round(startCount) }, 'startCount')} />}
+      {s.start === 'cells' && <>
+        <RangeField label="Count" value={s.cellCount} min={LIMITS.cellCount[0]} max={LIMITS.cellCount[1]} step={1} digits={0}
+          tip="How many cells to start from. Auto tune makes the lines finer for smaller cells, with more nodes." onChange={cellCount => change({ cellCount: Math.round(cellCount) }, 'cellCount')} />
+        <RangeField label="Size" value={s.cellSize} min={LIMITS.cellSize[0]} max={LIMITS.cellSize[1]} step={1} digits={0} suffix="%"
+          tip="How much of the boundary the cells fill. At 100 % they fill it to the edge; below, they fill a smaller copy round its middle and can burst out of it, up to the boundary."
+          onChange={cellSize => change({ cellSize: Math.round(cellSize) }, 'cellSize')} />
+        <RangeField label="Gap" value={s.cellGap} min={LIMITS.cellGap[0]} max={LIMITS.cellGap[1]} step={1} digits={0} suffix="%"
+          tip="How far apart neighbouring cells start, as a share of a cell’s width, so they have room to fold into each other."
+          onChange={cellGap => change({ cellGap: Math.round(cellGap) }, 'cellGap')} />
+        {s.colors === 'one' && <Button className="wide" tip="Fill each cell in its own colour, from a rainbow left to right. Change the gradient on the Style tab."
+          onClick={() => change({ colors: 'gradient', fill: true }, 'colors')}><Icon name="cells" />Colour the cells</Button>}
+      </>}
       <p className="hint">{s.start === 'custom' ? `${customCount} drawn or imported ${customCount === 1 ? 'line' : 'lines'}. ` : ''}Draw more with the Draw tool, even while the lines grow.</p>
     </Section>
   </>

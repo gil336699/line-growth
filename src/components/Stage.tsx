@@ -42,8 +42,9 @@ function nearestLine(strands: Strand[], x: number, y: number, reach: number): nu
 // The sheet preview. It fills the window behind the panels and fits the sheet into the free area between
 // them (the frame). Drag to draw a line, click a line to erase it with the Erase tool, Space-drag or the Pan
 // tool to pan, wheel or pinch to zoom. A tap of Space grows or pauses.
-export function Stage({ strands, rings, boundary, settings, tool, frameRef, controlRef, onDraw, onErase, onZoom, onNotice, onSpaceTap }: {
+export function Stage({ strands, colors, rings, boundary, settings, tool, frameRef, controlRef, onDraw, onErase, onZoom, onNotice, onSpaceTap }: {
   strands: Strand[]
+  colors: string[] | null
   rings: Polygon[]
   boundary: Boundary
   settings: Settings
@@ -109,10 +110,10 @@ export function Stage({ strands, rings, boundary, settings, tool, frameRef, cont
     if (!ctx) return
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, w, h)
-    drawGrowth(ctx, strands, rings, settings, { scale, ox, oy, dpr, preview: true, hover, draft })
+    drawGrowth(ctx, strands, rings, settings, { scale, ox, oy, dpr, preview: true, hover, draft, colors })
     // Read-only view state for QA scripts in development builds.
     if (import.meta.env.DEV) (window as unknown as { __stage: unknown }).__stage = { scale, ox, oy, rect: box.current?.getBoundingClientRect() }
-  }, [strands, rings, settings, scale, ox, oy, size, hover, draft])
+  }, [strands, colors, rings, settings, scale, ox, oy, size, hover, draft])
 
   const toWorld = useCallback((clientX: number, clientY: number) => {
     const r = box.current!.getBoundingClientRect()

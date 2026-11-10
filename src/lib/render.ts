@@ -11,6 +11,7 @@ export type DrawOptions = {
   transparent?: boolean
   hover?: number | null // the line the Erase tool would remove
   draft?: Vec[] | null // the line being drawn
+  colors?: string[] | null // each line's own colour (lib/colors.ts), for its stroke, fill and nodes
 }
 
 const PREVIEW_MIN_LINE = 0.75 // css px
@@ -20,6 +21,17 @@ function strandPath(ctx: CanvasRenderingContext2D, { closed, points: p }: Strand
   ctx.moveTo(p[0], p[1])
   for (let i = 2; i < p.length; i += 2) ctx.lineTo(p[i], p[i + 1])
   if (closed) ctx.closePath()
+}
+
+// The strands to draw in each colour, so lines that share one are stroked together.
+function byColor(strands: Strand[], colors: string[] | null | undefined, fallback: string, keep: (s: Strand) => boolean = () => true): Map<string, Strand[]> {
+  const groups = new Map<string, Strand[]>()
+  strands.forEach((strand, i) => {
+    if (!keep(strand)) return
+    const color = colors?.[i] ?? fallback, list = groups.get(color)
+    if (list) list.push(strand); else groups.set(color, [strand])
+  })
+  return groups
 }
 
 function ringsPath(ctx: CanvasRenderingContext2D, rings: Polygon[]) {
@@ -56,24 +68,32 @@ export function drawGrowth(ctx: CanvasRenderingContext2D, strands: Strand[], rin
     ctx.setLineDash([])
   }
 
-  // Each closed line's inside, filled on its own as Illustrator fills separate paths.
+  // Each closed line's inside, filled on its own as Illustrator fills separate paths. With a colour for each line,
+  // it fills in its own colour; otherwise in the fill colour.
   if (s.fill) {
-    ctx.fillStyle = s.fillColor
-    for (const strand of strands) if (strand.closed && strand.points.length >= 6) { ctx.beginPath(); strandPath(ctx, strand); ctx.fill('nonzero') }
+    strands.forEach((strand, i) => {
+      if (!strand.closed || strand.points.length < 6) return
+      ctx.fillStyle = o.colors?.[i] ?? s.fillColor
+      ctx.beginPath(); strandPath(ctx, strand); ctx.fill('nonzero')
+    })
   }
 
-  ctx.beginPath()
-  for (const strand of strands) strandPath(ctx, strand)
-  ctx.strokeStyle = s.lineColor
   ctx.lineWidth = Math.max(s.lineWidth, minLine)
-  ctx.stroke()
+  for (const [color, group] of byColor(strands, o.colors, s.lineColor)) {
+    ctx.beginPath()
+    for (const strand of group) strandPath(ctx, strand)
+    ctx.strokeStyle = color
+    ctx.stroke()
+  }
 
   if (s.showNodes) {
     const r = Math.max(nodeRadius(s.lineWidth), o.preview ? 1.4 * px : 0)
-    ctx.fillStyle = s.lineColor
-    ctx.beginPath()
-    for (const { points: p } of strands) for (let i = 0; i < p.length; i += 2) { ctx.moveTo(p[i] + r, p[i + 1]); ctx.arc(p[i], p[i + 1], r, 0, Math.PI * 2) }
-    ctx.fill()
+    for (const [color, group] of byColor(strands, o.colors, s.lineColor)) {
+      ctx.fillStyle = color
+      ctx.beginPath()
+      for (const { points: p } of group) for (let i = 0; i < p.length; i += 2) { ctx.moveTo(p[i] + r, p[i + 1]); ctx.arc(p[i], p[i + 1], r, 0, Math.PI * 2) }
+      ctx.fill()
+    }
   }
   ctx.restore()
 
@@ -98,11 +118,11 @@ export function pngProblem(width: number, height: number): string | null {
   return null
 }
 
-export function renderPng(strands: Strand[], rings: Polygon[], s: Settings, width: number, height: number): Promise<Blob | null> {
+export function renderPng(strands: Strand[], rings: Polygon[], s: Settings, width: number, height: number, colors: string[] | null = null): Promise<Blob | null> {
   const canvas = document.createElement('canvas')
   canvas.width = width; canvas.height = height
   const ctx = canvas.getContext('2d')
   if (!ctx) return Promise.resolve(null)
-  drawGrowth(ctx, strands, rings, s, { scale: width / s.width, ox: 0, oy: 0, dpr: 1, preview: false, transparent: s.transparentPng })
+  drawGrowth(ctx, strands, rings, s, { scale: width / s.width, ox: 0, oy: 0, dpr: 1, preview: false, transparent: s.transparentPng, colors })
   return new Promise(resolve => canvas.toBlob(blob => resolve(blob), 'image/png'))
 }

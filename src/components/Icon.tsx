@@ -15,6 +15,7 @@ const PATHS = {
   minus: <g {...stroke}><path d="M6 12h12" /></g>,
   plus: <g {...stroke}><path d="M12 6v12M6 12h12" /></g>,
   import: <g {...stroke}><path d="M12 3v11M7.5 9.5 12 14l4.5-4.5" /><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /></g>,
+  cells: <g {...stroke}><path d="M4 4h16v16H4Z" /><path d="M4 11l5-1 3-6M9 10l3 5 8-2M12 15l-2 5M12 15l8-2" /></g>,
   swap: <g {...stroke}><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3" /></g>,
 }
 

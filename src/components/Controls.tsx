@@ -24,14 +24,15 @@ export function SwitchField({ label, checked, onChange, tip, unavailable }: Tip 
 
 export type Option<T extends string> = { value: T; label: string; tip: string; unavailable?: string | false }
 
-export function Segmented<T extends string>({ label, options, value, onChange, unavailable, hideLabel }: {
-  label: string; options: Option<T>[]; value: T; onChange: (value: T) => void; unavailable?: string | false; hideLabel?: boolean
+// columns: how many options to a row; a long list wraps onto more rows, each its own capsule.
+export function Segmented<T extends string>({ label, options, value, onChange, unavailable, hideLabel, columns }: {
+  label: string; options: Option<T>[]; value: T; onChange: (value: T) => void; unavailable?: string | false; hideLabel?: boolean; columns?: number
 }) {
   const id = useId()
   return <div className="field">
     {!hideLabel && <span className="field-label" id={id}>{label}</span>}
-    <div className="button-row segmented" role="group" aria-labelledby={hideLabel ? undefined : id} aria-label={hideLabel ? label : undefined}
-      style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+    <div className={columns && columns < options.length ? 'button-row segmented rows' : 'button-row segmented'} role="group" aria-labelledby={hideLabel ? undefined : id} aria-label={hideLabel ? label : undefined}
+      style={{ gridTemplateColumns: `repeat(${columns ?? options.length}, minmax(0, 1fr))` }}>
       {options.map(option => {
         const off = unavailable || option.unavailable
         return <button key={option.value} type="button" aria-pressed={option.value === value}
