@@ -1,5 +1,10 @@
 # Line Growth Changelog
 
+## 1.4.0 2026-11-09
+
+- **Position for cells.** A grid of nine points under Size, like Illustrator's reference point, puts a smaller area of cells in the middle or against a side or corner of the boundary, so the cells burst out only the other way. Bottom left gives Gil's sketch: cells packed against the left and bottom, bursting out at the top and right. In a rectangle the area sits flush with both sides; in a circle it touches the edge at the corner's angle. At Size 100 % the cells fill the whole boundary, so Position is unavailable and says why. Before, a smaller area always sat in the middle, so cells burst out on every side.
+- **No made-up holes.** Below 100 %, the area for cells in an outline with a hole held a smaller copy of the hole where there was none, which the cells went round. It now keeps out only the outline's real holes.
+
 ## 1.3.0 2026-11-09
 
 - **Coloured Voronoi cells.** A new **Cells** start on the Shape tab fills the boundary with Voronoi cells, each a closed line that grows into a branching piece of its own, packed against its neighbours like jigsaw pieces. The cells fill a circle, a rectangle or an imported outline to its edges, holes included: Gil's JHU ICE page fills around its ticket-shaped window. **Count** sets how many (2–200), **Gap** how far apart neighbours start, and the seed places them. **Size** below 100 % fills a smaller copy of the outline, so the cells burst out of it as they grow. **Colour the cells** fills each one in its own colour from a rainbow, purple on the left to red on the right.
